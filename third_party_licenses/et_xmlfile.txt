@@ -1,0 +1,6 @@
+===== et_xmlfile-2.0.0.dist-info/AUTHORS.txt =====
+The authors in alphabetical order
+
+* Charlie Clark
+* Daniel Hillier
+* Elias Rabel
