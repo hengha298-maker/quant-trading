@@ -1,0 +1,13 @@
+{
+  "mode": "paper",
+  "initial_cash": 100000,
+  "etf_symbol": null,
+  "lookback": 20,
+  "order_lots": 1,
+  "max_position": 0.30,
+  "commission_rate": 0.0003,
+  "min_commission": 5,
+  "stock_sell_tax": 0.0005,
+  "stock_transfer_rate": 0.00001,
+  "max_quote_age_seconds": 120
+}
