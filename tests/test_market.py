@@ -22,6 +22,7 @@ def test_adapter_contract(etf):
     def history(**kwargs):
         assert kwargs['end_date'] == '20261014'
         assert kwargs['adjust'] == ''
+        assert ('timeout' not in kwargs) if etf else kwargs['timeout'] == 15
         return pd.DataFrame({'日期':['2026-10-14'], '收盘':[10]})
     def minutes(**kwargs):
         assert kwargs['period'] == '1'

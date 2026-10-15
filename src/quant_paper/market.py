@@ -25,7 +25,8 @@ class AkshareProvider:
 
     def history(self, symbol, start, end):
         func = self.ak.fund_etf_hist_em if symbol == self.etf_symbol else self.ak.stock_zh_a_hist
-        frame = func(symbol=symbol[:6], period="daily", start_date=start.strftime("%Y%m%d"), end_date=end.strftime("%Y%m%d"), adjust="")
+        options = {} if symbol == self.etf_symbol else {"timeout": 15}
+        frame = func(symbol=symbol[:6], period="daily", start_date=start.strftime("%Y%m%d"), end_date=end.strftime("%Y%m%d"), adjust="", **options)
         result = {}
         for _, row in frame.iterrows():
             day = datetime.fromisoformat(str(row["日期"])).date()
