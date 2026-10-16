@@ -1,9 +1,64 @@
-# Windows A 股自动模拟交易系统 V1
+# Windows A 股自动模拟交易系统 V1.1
 
 **只有模拟交易，没有实盘功能。无需、也不应提供任何券商密码或交易凭证。**
 支持长江电力 `600900.SH`；红利50 ETF 未确定，默认禁用，绝不预填猜测代码。
 
-## Windows 最少操作
+
+## 已有 V1：Windows 升级与 Bark 配置
+
+本版本保留原有模拟账户、风控、交易规则与任务名，运行时间仍为**周一至周五北京时间14:50**。Bark 通知在交易事务完成后发送，失败不回滚账户、不重新下单、不改变交易退出码。无需编写 Python。
+
+1. **等本 PR 合并后**，在原安装目录打开 PowerShell。先暂停任务并确认没有运行中的程序，再备份整个数据目录：
+
+   ```powershell
+   Disable-ScheduledTask -TaskName 'QuantTrading-Paper-V1'
+   New-Item -ItemType Directory -Force .\backups | Out-Null
+   Copy-Item .\data ('.\backups\data-' + (Get-Date -Format 'yyyyMMdd-HHmmss')) -Recurse
+   git switch main
+   git pull --ff-only
+   powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1
+   ```
+
+   ZIP 安装用户：下载合并后的 main，覆盖**原目录中的代码文件**，不要删除或覆盖 `data`、`config.json`、`bark.local.json`，然后运行上面的安装命令。不要换目录或初始化新账户。安装失败时保持任务停用，修复后再继续。
+
+2. iPhone 安装并打开 Bark、允许通知。在项目目录创建本机配置：
+
+   ```powershell
+   Copy-Item .\bark.example.json .\bark.local.json
+   notepad .\bark.local.json
+   ```
+
+   只在第一次配置时复制，已有文件直接编辑。`server` 填 Bark 的 HTTPS **服务器根地址**（官方服务为 `https://api.day.app`，也支持自建 HTTPS 域名）；`device_key` 填 Bark App 显示的设备密钥。若 App 给出 `https://服务器/设备密钥/…`，将服务器根地址和密钥分开填写，不要把完整推送链接填入 server。保持 JSON 双引号和逗号有效。
+
+   `bark.local.json` 已被 Git 忽略，程序不会输出其内容。不要截图分享密钥，不要使用 `git add -f` 提交它。配置必须可被运行计划任务的当前 Windows 用户读取；不要放进交易参数 `config.json`。
+
+3. **只测试通知，不读取行情、不打开数据库、不产生模拟交易**：
+
+   ```powershell
+   .\.venv\Scripts\python.exe -m quant_paper.cli notify-test
+   ```
+
+   终端显示 `Bark 通知：成功`，并在 iPhone 收到测试消息后继续。`未配置` / `失败` 的退出码为1；检查 JSON、密钥、iPhone 通知权限、网络及服务器可用性。服务端接受成功不保证 iPhone 必然展示通知。
+
+4. 更新同名任务的启动参数并恢复自动运行（**仍是14:50，没有改变触发时间**）：
+
+   ```powershell
+   powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\schedule.ps1
+   .\.venv\Scripts\python.exe -m quant_paper.cli status
+   ```
+
+   `status` 只查看账户，不推送。确认原有持仓与现金仍在。不要为了测试通知执行 `run`，交易时段执行它会正常触发策略。
+
+### 推送规则与环境变量
+
+- 计划任务使用 `run --notify always`：每次完成都发中文结果，含日期、状态、当次模拟成交方向/代码/数量/价格/手续费及账户现金；观望、风控拒单、当天重复委托和休市也会报告。重复运行不会把历史成交冒充本次成交。
+- 手动 `run` 默认 `--notify auto`：交易时段的结果照常推送；非交易日/非交易时段的正常跳过不推送。异常仍尽可能通知。`--notify never` 可关闭该次所有通知。
+- 无配置则禁用推送，保留 V1 行为。配置错误或 Bark 网络/API 错误只记固定的“失败”，不记录地址、密钥、请求正文或服务端原始错误；通知超时为连接3秒、读取5秒，不重试、不跟随重定向。行情或交易异常仍退出1，不因通知成功而掩盖错误。
+- 若多个标的中一笔已经提交、后续发生异常，错误报告会保留本次已完成的委托信息；已有成交不会回滚。异常详情见本机 `logs/paper.log`。
+- 也可使用本机环境变量 `BARK_SERVER`、`BARK_DEVICE_KEY`（分别覆盖同名文件字段）；两项均设置时无需配置文件。请使用 Windows 的“编辑账户的环境变量”界面填写，避免把密钥留在 PowerShell 历史中。计划任务进程必须能继承这些变量，修改后可能需要重新登录 Windows，因此优先推荐本机 JSON 文件。`.env` 文件不自动加载。
+- 高级用户可用 `--bark-config` 指定另一本机文件；相对路径按当前工作目录解析，计划任务工作目录固定为仓库目录。请保证任何自定义密钥文件同样不提交 Git。
+
+## Windows 首次安装
 
 1. 安装 **Python 3.12 64 位**（[官网](https://www.python.org/downloads/windows/)），保留 Python Launcher；下载此仓库代码并解压到固定目录。
 2. 在仓库目录右键打开 PowerShell，粘贴以下命令。脚本安装依赖、生成配置并自动运行测试，无需编写 Python：
@@ -39,7 +94,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\schedule.ps1 -Remo
 ```
 
 - `data/paper.sqlite3`：现金（分）、仓位（股/份）、委托、虚拟成交、事件日志。`status` 中金额除以100得到元。
-- `logs/paper.log`：轮转运行日志，保留异常详情。失败退出码1；正常运行或跳过退出码0。
+- `logs/paper.log`：轮转运行日志，保留交易异常详情及脱敏后的通知状态。失败退出码1；正常运行或跳过退出码0。
 - `FILLED` 表示**虚拟成交**；成交标签固定 `PAPER_SYNTHETIC_MINUTE_PRICE`，不是券商或交易所成交。
 - `DUPLICATE` 当天已经委托；`INSUFFICIENT_CASH` 资金不足；`POSITION_LIMIT` 超仓位；`T_PLUS_ONE` 当天买入不可卖。
 - 非交易日/非交易时段显示 `SKIP_...`，正常且不会下单。
@@ -79,7 +134,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\schedule.ps1 -Remo
 
 ## 依赖与开发验证
 
-优先采用 AKShare（MIT）、exchange-calendars（Apache-2.0）、SQLite/Python标准库、pytest（MIT）和 tzdata（Apache-2.0，内含时区数据授权声明）。完整版本在 `requirements.lock`；上游及传递依赖许可证见 [THIRD_PARTY.md](THIRD_PARTY.md)。行情数据使用权与软件许可证不同，请遵守数据服务条款，不批量转售行情。
+优先采用 AKShare（MIT）、exchange-calendars（Apache-2.0）、SQLite/Python标准库、Requests（Apache-2.0）、pytest（MIT）和 tzdata（Apache-2.0，内含时区数据授权声明）。完整版本在 `requirements.lock`；上游及传递依赖许可证见 [THIRD_PARTY.md](THIRD_PARTY.md)。行情数据使用权与软件许可证不同，请遵守数据服务条款，不批量转售行情。
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest -q
@@ -88,4 +143,4 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\schedule.ps1 -Remo
 
 自动测试使用固定数据，不依赖真实行情、不生成真实委托；覆盖资金不足、缺失/过期行情、非交易日、重复与并发委托、恢复、T+1、费用、仓位、故障回滚和数据适配器。GitHub Actions 配置了 Windows/Linux Python 3.12 测试。详见 [TEST_RESULTS.md](TEST_RESULTS.md)。
 
-已知限制：本开发环境无法访问东方财富服务，尚未完成真实联网行情端到端验收；Windows脚本也尚未在Windows主机实际执行。数据服务可能变更字段、延迟、限流或停服，失败时系统会拒绝下单，请查看日志，不要关闭过期保护。需要先在自己的Windows电脑安装并观察运行日志，再长期自动运行。
+已知限制：用户已在 Windows 完成 V1 自动模拟买入；V1.1 的真实 Bark iPhone 到达测试仍需在本机配置后通过 `notify-test` 验证。自动测试使用模拟 Bark 响应，不需要或读取真实设备密钥。数据服务可能变更字段、延迟、限流或停服，失败时系统会拒绝下单，请查看日志，不要关闭过期保护。需要先在自己的Windows电脑安装并观察运行日志，再长期自动运行。

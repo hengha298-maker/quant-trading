@@ -12,7 +12,7 @@ if ((Get-TimeZone).Id -ne 'China Standard Time') {
 $root = Split-Path $PSScriptRoot -Parent
 $python = Join-Path $root '.venv\Scripts\python.exe'
 if (!(Test-Path $python)) { throw '请先执行 install.ps1' }
-$action = New-ScheduledTaskAction -Execute $python -Argument '-m quant_paper.cli run' -WorkingDirectory $root
+$action = New-ScheduledTaskAction -Execute $python -Argument '-m quant_paper.cli run --notify always' -WorkingDirectory $root
 $trigger = New-ScheduledTaskTrigger -Weekly -DaysOfWeek Monday,Tuesday,Wednesday,Thursday,Friday -At '14:50'
 $settings = New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Minutes 5)
 # No password, no elevated privileges; user must be logged in and PC awake.

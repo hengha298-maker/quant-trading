@@ -165,7 +165,7 @@ def execute(store, cfg, now, symbol, side, quotes):
         raise
 
 
-def run(store, cfg, provider, calendar, now):
+def run(store, cfg, provider, calendar, now, *, outcomes=None):
     if now.tzinfo is None:
         raise ValueError("运行时间必须含时区")
     now = now.astimezone(BJ)
@@ -197,7 +197,8 @@ def run(store, cfg, provider, calendar, now):
             raise ValueError("账户中有配置外持仓，请恢复原配置后运行")
         store.event(now, "INFO", json.dumps({"config": cfg.__dict__, "history_days": [str(d) for d in previous],
             "quotes": {s: {"time": q.timestamp.isoformat(), "price": q.price, "volume": q.volume} for s, q in quotes.items()}}, ensure_ascii=False))
-        results = {}
+        # Optional caller-owned outcomes retain committed decisions if a later symbol fails.
+        results = outcomes if outcomes is not None else {}
         for symbol, side in signals.items():
             if side != "HOLD":
                 results[symbol] = execute(store, cfg, now + timedelta(seconds=time.monotonic() - started), symbol, side, quotes)

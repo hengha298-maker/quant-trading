@@ -4,10 +4,10 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "quant-paper"
-version = "0.1.0"
+version = "0.1.1"
 description = "Windows A股纯模拟交易"
 requires-python = ">=3.12"
-dependencies = ["akshare>=1.18,<2", "exchange-calendars>=4.11,<5", "tzdata>=2025.2"]
+dependencies = ["akshare>=1.18,<2", "exchange-calendars>=4.11,<5", "tzdata>=2025.2", "requests>=2.32,<3"]
 
 [project.optional-dependencies]
 test = ["pytest>=8,<9"]

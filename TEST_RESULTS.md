@@ -1,3 +1,17 @@
+# V1.1 Bark 验证记录
+
+验证日期：北京时间 2026-10-16；Linux、Python 3.12、依赖沿用 requirements.lock。
+
+- `python -m pytest -q`：**68 passed**（原 V1 37项全部保留）。
+- `python -m pip check`、`git diff --check`：通过。
+- `python -m pip install --no-deps -e .`：安装成功，版本0.1.1。
+- 新增31项用例：Bark JSON/环境变量优先级、配置校验和脱敏、中文POST正文、连接/读取超时参数、禁止重定向、HTTP/API/JSON/连接失败；买入/卖出/手续费/现金报告；观望、拒单、重复委托、非交易时段与非交易日的通知策略；行情/配置/数据库/日志目录异常通知；通知失败或格式化失败不影响成交与重复保护；部分标的失败时报告已提交成交；独立通知测试不读取行情、不创建账户、不改动现有账户。
+- 所有 Bark 请求使用模拟响应，未使用真实设备密钥、未发送真实手机推送。真实 iPhone 展示需由 Windows 本机 `notify-test` 验证。
+- GitHub Actions 继续在 `ubuntu-latest` 和 `windows-latest` Python 3.12 上运行完整测试，并新增依赖一致性检查；远程结果以本 PR 的 Checks 为准。
+- 计划任务仅新增 `--notify always` 启动参数，14:50触发时间、任务名、用户权限和并发策略不变。没有连接券商或修改数据库结构。
+
+以下保留 V1 开发时的历史记录（不代表 V1.1 当前 CI 状态）。
+
 # V1 验证记录
 
 验证日期：北京时间 2026-10-16。环境：Linux、CPython 3.12；AKShare 1.19.1、exchange-calendars 4.13.2、pytest 8.4.2。运行时依赖版本见 requirements.lock。
