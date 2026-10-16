@@ -6,3 +6,8 @@ data/
 logs/
 work/
 config.json
+bark*.json
+!bark.example.json
+.env
+.env.*
+backups/
