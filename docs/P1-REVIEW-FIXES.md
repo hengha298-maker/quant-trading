@@ -49,3 +49,5 @@ python -m unittest discover -s tests -p test_review.py -k ReportReviewTests -v
 - 未修改V1.1模拟账户、Bark、数据库、src、scripts、依赖锁文件或原测试。无真实持仓或凭证被提交。保持Draft，等待下一轮审核。
 
 首轮CI暴露旧版同步目录检测的子串误报：随机临时目录碰巧含box也被拒绝。已改为已知目录名/组织后缀边界匹配，并新增tmpbox123、中文box笔记、本地资料可用及真正Box/OneDrive/Dropbox目录仍拒绝的回归测试；不是跳过该安全检查。
+
+Windows首轮真实联接点测试确认目标被正确解析为长路径，但测试把结果与RUNNER~1短路径字符串比较而失败；现按严格解析后的目标比较，继续验证真实联接点，无跳过或放宽存储策略。

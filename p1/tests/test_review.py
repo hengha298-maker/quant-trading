@@ -245,7 +245,7 @@ class WindowsStorageTests(unittest.TestCase):
         result = subprocess.run(['cmd', '/c', 'mklink', '/J', str(link), str(target)], capture_output=True)
         self.assertEqual(result.returncode, 0, 'CI must support ordinary directory junctions')
         self.addCleanup(lambda: link.rmdir() if link.exists() else None)
-        self.assertEqual(storage.local_path(link / 'new'), target / 'new')
+        self.assertEqual(storage.local_path(link / 'new'), target.resolve(strict=True) / 'new')
         forbidden = self.base / 'repo-junction'
         result = subprocess.run(['cmd', '/c', 'mklink', '/J', str(forbidden), str(REPO)], capture_output=True)
         self.assertEqual(result.returncode, 0)
