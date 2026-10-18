@@ -2,6 +2,8 @@ import csv
 from datetime import date
 from decimal import Decimal
 import io
+import os
+import subprocess
 import json
 from pathlib import Path
 import tempfile
@@ -152,6 +154,17 @@ class ResearchTests(unittest.TestCase):
             self.assertEqual(check(), 1)
         with patch('check_private.subprocess.check_output', return_value=b'config.example.json\0p1/goose_research/market.py\0'):
             self.assertEqual(check(True), 0)
+
+    def test_non_utf8_redirected_console(self):
+        env = dict(os.environ, PYTHONIOENCODING='cp1252')
+        result = subprocess.run([sys.executable, str(Path(__file__).resolve().parents[1] / 'check_private.py'), '--all'], env=env, capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('检查通过', result.stdout.decode('utf-8'))
+        result = subprocess.run([sys.executable, '-m', 'goose_research', '--data-dir', str(self.base), 'template'], cwd=Path(__file__).resolve().parents[1], env=env, capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        result = subprocess.run([sys.executable, '-m', 'goose_research', '--data-dir', str(self.base), 'template'], cwd=Path(__file__).resolve().parents[1], env=env, capture_output=True)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn('操作失败', result.stdout.decode('utf-8'))
 
     def test_cli(self):
         self.assertEqual(main(['--data-dir', str(self.base), 'template']), 0)

@@ -8,6 +8,8 @@ FORBIDDEN = {'.csv', '.json', '.html', '.db', '.sqlite', '.sqlite3', '.zip', '.b
 
 
 def check(all_files=False):
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     args = ['git', 'ls-files', '-z'] if all_files else ['git', 'diff', '--cached', '--name-only', '--diff-filter=ACMR', '-z']
     files = subprocess.check_output(args, cwd=REPO).decode('utf-8').split('\0')
     bad = [f for f in files if f and f not in ALLOW and (Path(f).suffix.lower() in FORBIDDEN or any(x.lower() in ('snapshots', 'reports', 'private', 'backups') for x in Path(f).parts))]

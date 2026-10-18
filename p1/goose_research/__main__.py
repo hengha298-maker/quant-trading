@@ -1,4 +1,5 @@
 import argparse
+import sys
 import csv
 from .storage import initialize, root
 from .holdings import FIELDS, import_csv
@@ -7,6 +8,8 @@ from .report import generate
 
 
 def main(argv=None):
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     parser = argparse.ArgumentParser(description='养鹅 P1：手动、只读、离线报告；不使用 V1 配置')
     parser.add_argument('--data-dir', required=True, help='仓库外、非云同步的本地私有目录')
     subs = parser.add_subparsers(dest='command', required=True)
