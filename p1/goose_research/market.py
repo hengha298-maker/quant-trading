@@ -6,6 +6,7 @@ import re
 from urllib.parse import urlencode
 from urllib.request import urlopen
 from .storage import save
+from .validation import validate_market
 
 
 def three_years_ago(today):
@@ -52,7 +53,6 @@ def fetch(symbol, interval, opener=urlopen):
                 raise ValueError('invalid bar')
             seen.add(values[0])
             rows.append(dict(time=values[0], open=str(o), close=str(c), high=str(h), low=str(low), volume=str(volume)))
-        rows.sort(key=lambda r: r['time'])
         if not rows:
             raise ValueError('empty data')
         days = {r['time'][:10] for r in rows}
@@ -65,12 +65,15 @@ def fetch(symbol, interval, opener=urlopen):
         result['audit_detail'] = dict(calendar_verified=False, missing_weekday_candidates=candidates if interval == 'daily' else [],
                                       note='候选缺口含节假日、停牌、上市前日期；不能直接视为漏数。分钟不推算历史缺口。',
                                       last_observation_lag_days=(today - date.fromisoformat(rows[-1]['time'][:10])).days)
-        result.update(status='observed', rows=rows, observed_start=rows[0]['time'], observed_end=rows[-1]['time'],
+        result.update(status='observed', fetched_at=datetime.now(timezone.utc).isoformat(), rows=rows, observed_start=rows[0]['time'], observed_end=rows[-1]['time'],
                       count=len(rows), stale=rows[-1]['time'][:10] != str(today))
+        validate_market(result)
     except Exception as exc:
         # Do not expose server response, arbitrary URL text or local credentials.
-        result['error_type'] = type(exc).__name__
-    return result
+        for key in ('audit_detail', 'count', 'stale', 'observed_start', 'observed_end'):
+            result.pop(key, None)
+        result.update(status='unavailable', rows=[], error_type=type(exc).__name__)
+    return validate_market(result)
 
 
 def collect(base, symbol, interval):

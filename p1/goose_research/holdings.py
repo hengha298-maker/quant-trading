@@ -1,20 +1,10 @@
 import csv
 from datetime import date, datetime, timezone, timedelta
-from decimal import Decimal, InvalidOperation
 import re
 from .storage import local_path, root, save
+from .validation import number, validate_snapshot
 
 FIELDS = ['account', 'broker', 'as_of', 'coverage', 'cash', 'symbol', 'kind', 'quantity', 'available', 'broker_cost']
-
-
-def number(value, integer=False, signed=False):
-    try:
-        n = Decimal(str(value))
-    except InvalidOperation:
-        raise ValueError('数值无效') from None
-    if not n.is_finite() or (n < 0 and not signed) or (integer and n != n.to_integral_value()):
-        raise ValueError('数值必须有限、非负；数量必须整数')
-    return n
 
 
 def parse(path):
@@ -64,7 +54,7 @@ def parse(path):
             raise ValueError('持仓须大于零，可卖数量不能超过持仓')
         cost = None if r['broker_cost'] == '' else str(number(r['broker_cost'], signed=True))
         a['positions'].append(dict(symbol=r['symbol'], kind=r['kind'], quantity=int(qty), available=int(available), broker_cost=cost, cost_basis='broker_display'))
-    return dict(schema_version=1, as_of=str(snapshot_date), accounts=list(accounts.values()), transaction_history_complete=False)
+    return validate_snapshot(dict(schema_version=1, as_of=str(snapshot_date), accounts=list(accounts.values()), transaction_history_complete=False))
 
 
 def import_csv(path, base):
