@@ -36,7 +36,7 @@ python -m unittest discover -s tests -p test_review.py -k ReportReviewTests -v
 
 完整新增测试继续覆盖文件入口无效时不生成HTML、重复JSON键/非法常量、数据结构与数值、不可用行情不分析、ETF未知成本、已损坏链接、Windows驱动器政策和原生联接点。测试仅使用虚构数值和匿名账户。
 
-本地 Linux Python3.12.14：P1共34项，28通过、6项Windows专用测试跳过；完整pytest回归96 passed / 6 skipped（含原V1.1全部68项）；pip check、隐私检查、diff检查通过。专用依赖安装在云端work/validation-venv，不修改用户V1.1环境。Windows/Linux远程最终结果及提交SHA记录在本PR描述的本轮修复段，避免文档更新反复触发CI。
+本地 Linux Python3.12.14：P1共35项，29通过、6项Windows专用测试跳过；完整pytest回归97 passed / 6 skipped（含原V1.1全部68项）；pip check、隐私检查、diff检查通过。专用依赖安装在云端work/validation-venv，不修改用户V1.1环境。Windows/Linux远程最终结果及提交SHA记录在本PR描述的本轮修复段，避免文档更新反复触发CI。
 
 ## 本轮真实联网结果及剩余风险
 
@@ -47,3 +47,5 @@ python -m unittest discover -s tests -p test_review.py -k ReportReviewTests -v
 - 映射盘/远端链接使用边界模拟验证，没有真实企业SMB环境验收；常规中文本地目录和本地联接点由原生Windows CI验证。
 - 具体费率未核验，成本、税费、滑点仍是明确示例；没有实时信号、券商接口、定时任务或盈利承诺。
 - 未修改V1.1模拟账户、Bark、数据库、src、scripts、依赖锁文件或原测试。无真实持仓或凭证被提交。保持Draft，等待下一轮审核。
+
+首轮CI暴露旧版同步目录检测的子串误报：随机临时目录碰巧含box也被拒绝。已改为已知目录名/组织后缀边界匹配，并新增tmpbox123、中文box笔记、本地资料可用及真正Box/OneDrive/Dropbox目录仍拒绝的回归测试；不是跳过该安全检查。

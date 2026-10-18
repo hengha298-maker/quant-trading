@@ -182,6 +182,13 @@ class SharedValidationTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             storage.local_path(link / 'child')
 
+    def test_local_names_not_confused_with_cloud_names(self):
+        for name in ('tmpbox123', '中文box笔记', '本地资料'):
+            self.assertEqual(storage.local_path(self.base / name), self.base / name)
+        for name in ('Box', 'OneDrive - Example', 'Dropbox (Personal)'):
+            with self.subTest(name=name), self.assertRaises(ValueError):
+                storage.local_path(self.base / name)
+
     def test_windows_drive_policy_on_all_platforms(self):
         # Deterministic Win32 boundary tests; no real network is contacted.
         for drive_type in (0, 1, 2, 4, 5, 6):

@@ -77,7 +77,8 @@ def local_path(path):
     for candidate in (original, p):
         if candidate == REPO or REPO in candidate.parents or any((x / '.git').is_file() or (x / '.git' / 'HEAD').is_file() for x in (candidate, *candidate.parents)):
             raise ValueError('真实数据路径不得位于 Git 仓库内')
-        if any(any(word in part.lower() for word in BLOCKED) for part in candidate.parts):
+        if any(any(part.casefold() == word or part.casefold().startswith((word + ' - ', word + ' (', word + ' sync'))
+                   for word in BLOCKED) for part in candidate.parts):
             raise ValueError('禁止已知云同步路径')
         for key in ('OneDrive', 'OneDriveConsumer', 'OneDriveCommercial'):
             if os.environ.get(key):
