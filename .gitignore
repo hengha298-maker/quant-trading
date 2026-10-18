@@ -11,3 +11,12 @@ bark*.json
 .env
 .env.*
 backups/
+
+# P1 private artifacts (must also live outside the repository)
+snapshots/
+reports/
+private/
+*.csv
+*.html
+*.sqlite*
+*.bak

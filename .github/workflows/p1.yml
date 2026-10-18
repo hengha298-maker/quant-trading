@@ -1,0 +1,16 @@
+name: P1 isolated research
+on: [push, pull_request]
+jobs:
+  p1:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python p1/check_private.py --all
+      - working-directory: p1
+        run: python -m unittest discover -s tests -v
