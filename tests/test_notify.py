@@ -13,6 +13,7 @@ from test_core import NOW, Calendar, Provider
 
 @pytest.fixture
 def bark(tmp_path, monkeypatch):
+    monkeypatch.delenv('BARK_IS_ARCHIVE', raising=False)
     monkeypatch.delenv('BARK_SERVER', raising=False)
     monkeypatch.delenv('BARK_DEVICE_KEY', raising=False)
     path = tmp_path / 'bark.local.json'
@@ -61,6 +62,9 @@ def test_post_payload_and_timeouts(bark, monkeypatch):
         assert 'test-key' not in url
         assert kwargs['json']['device_key'] == 'test-key'
         assert kwargs['json']['body'] == '中文正文'
+        assert kwargs['json']['title'] == '中文标题'
+        assert kwargs['json']['group'] == '模拟交易'
+        assert kwargs['json']['isArchive'] == 1
         assert kwargs['allow_redirects'] is False
         assert kwargs['timeout'] == (3, 5)
         return Response()
@@ -129,7 +133,9 @@ def test_buy_report_and_duplicate(app):
 
 
 def test_failed_push_preserves_fill_and_exit_code(app, monkeypatch, caplog):
+    attempts = []
     def fail(*a, **kw):
+        attempts.append(kw['json'])
         raise requests.Timeout('test-key https://bark.example.test')
     monkeypatch.setattr(requests, 'post', fail)
     assert cli.main() == 0
@@ -137,6 +143,10 @@ def test_failed_push_preserves_fill_and_exit_code(app, monkeypatch, caplog):
     assert len(before['fills']) == 1
     assert cli.main() == 0
     assert snapshot() == before
+    assert len(attempts) == 2  # One request per run; no notification/trading retries.
+    assert attempts[0]['isArchive'] == 1
+    assert '模拟买入' in attempts[0]['body']
+    assert '今日已有委托' in attempts[1]['body']
     assert 'test-key' not in Path('logs/paper.log').read_text(encoding='utf-8') + caplog.text
 
 
@@ -277,3 +287,43 @@ def test_test_command_preserves_existing_account(app, monkeypatch):
     monkeypatch.setattr(sys, 'argv', ['quant-paper', 'notify-test'])
     assert cli.main() == 0
     assert snapshot() == before
+
+
+@pytest.mark.parametrize('enabled', [True, False])
+def test_archive_file_switch(bark, monkeypatch, enabled):
+    data = json.loads(bark.read_text(encoding='utf-8-sig'))
+    data['is_archive'] = enabled
+    bark.write_text(json.dumps(data), encoding='utf-8')
+    def post(url, **kwargs):
+        assert kwargs['json']['isArchive'] == int(enabled)
+        return Response()
+    monkeypatch.setattr(requests, 'post', post)
+    assert notify.deliver(bark, '标题', '正文') == '成功'
+
+
+@pytest.mark.parametrize('value', ['false', 0, 1, None, [], {}])
+def test_invalid_archive_is_redacted(bark, monkeypatch, value):
+    data = json.loads(bark.read_text(encoding='utf-8-sig'))
+    data['is_archive'] = value
+    bark.write_text(json.dumps(data), encoding='utf-8')
+    monkeypatch.setattr(requests, 'post', lambda *a, **kw: pytest.fail('must not send'))
+    assert notify.deliver(bark, '标题', '正文') == '失败'
+
+
+@pytest.mark.parametrize('value,enabled', [('0', False), ('1', True)])
+def test_archive_environment_override(bark, monkeypatch, value, enabled):
+    data = json.loads(bark.read_text(encoding='utf-8-sig'))
+    data['is_archive'] = not enabled
+    bark.write_text(json.dumps(data), encoding='utf-8')
+    monkeypatch.setenv('BARK_IS_ARCHIVE', value)
+    assert notify.load_config(bark).is_archive is enabled
+    monkeypatch.setenv('BARK_SERVER', 'https://bark.example.test')
+    monkeypatch.setenv('BARK_DEVICE_KEY', 'environment-key')
+    bark.write_text('invalid json', encoding='utf-8')
+    assert notify.load_config(bark).is_archive is enabled
+
+
+def test_invalid_archive_environment(bark, monkeypatch):
+    monkeypatch.setenv('BARK_IS_ARCHIVE', 'false')
+    monkeypatch.setattr(requests, 'post', lambda *a, **kw: pytest.fail('must not send'))
+    assert notify.deliver(bark, '标题', '正文') == '失败'

@@ -1,3 +1,17 @@
+# V1.1 Bark 历史保存修复验证
+
+验证日期：北京时间 2026-10-19；Linux、Python 3.12，使用 requirements.lock 锁定依赖。
+
+- 通知专项 `python -m pytest -q tests/test_notify.py`：42 passed。
+- 全量 V1.1 回归 `python -m pytest -q`：79 passed，保留原68项并新增11项参数化用例。
+- `python -m pip check`、`git diff --check`：通过。
+- 覆盖默认归档、JSON 开关、严格布尔值校验、环境变量覆盖及无文件模式；保留中文标题与正文、成交价格/数量/手续费/现金/异常提醒测试；通知超时后成交不变、同日再次运行不重复委托、每次只发送一次。
+- 所有请求使用虚构测试密钥和模拟响应，没有访问真实 Bark 服务。iPhone 收到通知和 App 历史可见需由用户升级后运行 `notify-test` 验证；旧通知不能补回。
+- 仅修改通知配置/参数、测试、配置示例与文档；没有修改交易策略、SQLite、CLI、Windows 脚本或14:50任务。
+- 本地未在 Windows 主机实测；远程 Windows/Linux 结果以独立修复 PR 的 Checks 为准。
+
+以下为此前版本的历史验证记录。
+
 # V1.1 Bark 验证记录
 
 验证日期：北京时间 2026-10-16；Linux、Python 3.12、依赖沿用 requirements.lock。
