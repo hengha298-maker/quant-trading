@@ -49,6 +49,24 @@
 
    `status` 只查看账户，不推送。确认原有持仓与现金仍在。不要为了测试通知执行 `run`，交易时段执行它会正常触发策略。
 
+### V1.1 Bark 历史保存修复：安全升级
+
+本修复默认发送 `isArchive=1`，新通知会请求保存到 Bark App 历史；此前未归档的消息不会补回。旧配置无需修改。可在本机 `bark.local.json` 增加 `"is_archive": false` 关闭，或设为 `true` 开启；必须使用 JSON 布尔值，不能写字符串或数字。环境变量 `BARK_IS_ARCHIVE=1` / `0` 优先覆盖此字段。若服务器和密钥均来自环境变量，仍不读取私密文件，此时使用该环境变量控制历史，省略则开启。
+
+仅升级本修复时，**等待审核合并 main 后**，在非运行时段手动停用 `QuantTrading-Paper-V1`，确认程序已结束，再备份 `data`（包含 SQLite 及可能存在的附属文件）、`config.json` 和 `bark.local.json` 到本机私密位置。记录原提交，工作区有改动时先处理，勿用强制覆盖命令。
+
+```powershell
+git rev-parse HEAD
+git status --short
+git switch main
+git pull --ff-only
+.\.venv\Scripts\python.exe -m pytest -q
+.\.venv\Scripts\python.exe -m quant_paper.cli notify-test
+.\.venv\Scripts\python.exe -m quant_paper.cli status
+```
+
+确认测试通过、iPhone 收到测试通知且 Bark App 历史可见、原账户现金和持仓正确后，手动启用原任务。本修复没有依赖或数据库迁移，不需要重新安装、运行 `schedule.ps1` 或重建14:50任务。ZIP 用户仅覆盖本 PR 涉及的代码、测试及文档，保留本机配置和数据。不要为验证通知执行 `run`。失败时保持任务停用，恢复原代码版本并排查；不要重置或用旧数据库覆盖已有成交。不要上传备份、密钥或完整推送地址。
+
 ### 推送规则与环境变量
 
 - 计划任务使用 `run --notify always`：每次完成都发中文结果，含日期、状态、当次模拟成交方向/代码/数量/价格/手续费及账户现金；观望、风控拒单、当天重复委托和休市也会报告。重复运行不会把历史成交冒充本次成交。

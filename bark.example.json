@@ -1,4 +1,5 @@
 {
   "server": "",
-  "device_key": ""
+  "device_key": "",
+  "is_archive": true
 }

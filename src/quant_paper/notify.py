@@ -14,20 +14,28 @@ import requests
 class BarkConfig:
     server: str = field(repr=False)
     device_key: str = field(repr=False)
+    is_archive: bool = True
 
 
 def load_config(path):
     # Environment wins per field. Do not read an unnecessary private file.
     server = os.environ.get("BARK_SERVER")
     key = os.environ.get("BARK_DEVICE_KEY")
+    archive_env = os.environ.get("BARK_IS_ARCHIVE")
+    archive = True
+    if archive_env is not None:
+        if archive_env not in ("0", "1"):
+            raise ValueError("Bark 配置无效")
+        archive = archive_env == "1"
     if server is None or key is None:
         file = Path(path)
         data = json.loads(file.read_text(encoding="utf-8-sig")) if file.exists() else {}
         server = data.get("server", "") if server is None else server
         key = data.get("device_key", "") if key is None else key
+        archive = data.get("is_archive", True) if archive_env is None else archive
     if not server and not key:
         return None
-    if not isinstance(server, str) or not isinstance(key, str):
+    if not isinstance(server, str) or not isinstance(key, str) or type(archive) is not bool:
         raise ValueError("Bark 配置无效")
     parts = urlsplit(server)
     # Server base only; never accept a copied URL containing the device key.
@@ -36,7 +44,7 @@ def load_config(path):
             or not re.fullmatch(r"[A-Za-z0-9_-]+", key)):
         raise ValueError("Bark 配置无效")
     _ = parts.port
-    return BarkConfig(server.rstrip("/"), key)
+    return BarkConfig(server.rstrip("/"), key, archive)
 
 
 def deliver(config_path, title, body):
@@ -48,7 +56,7 @@ def deliver(config_path, title, body):
         # POST /push keeps the key out of URLs. No retries or redirects.
         with requests.post(cfg.server + "/push", json={
             "device_key": cfg.device_key, "title": title, "body": body,
-            "group": "模拟交易", "isArchive": 0,
+            "group": "模拟交易", "isArchive": int(cfg.is_archive),
         }, timeout=(3, 5), allow_redirects=False) as response:
             if response.status_code != 200 or response.json().get("code") != 200:
                 return "失败"
