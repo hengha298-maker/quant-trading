@@ -1,0 +1,17 @@
+{
+  "id": "./",
+  "name": "养鹅计划·演示",
+  "short_name": "养鹅计划",
+  "description": "手机优先的个人投资研究原型，仅使用虚构演示数据。",
+  "lang": "zh-CN",
+  "start_url": "./#/",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f5f6f2",
+  "theme_color": "#172f2c",
+  "icons": [
+    { "src": "assets/192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "assets/512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" },
+    { "src": "assets/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

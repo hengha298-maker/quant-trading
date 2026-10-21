@@ -1,0 +1,69 @@
+{
+  "passed": 13,
+  "failed": 0,
+  "skipped": 1,
+  "results": [
+    {
+      "name": "four interactive pages / iPhone screenshots",
+      "result": "passed"
+    },
+    {
+      "name": "all pages fit 375 / 390 / 430 / 1440 pixel viewports",
+      "result": "passed"
+    },
+    {
+      "name": "navigation, strategy detail and return",
+      "result": "passed"
+    },
+    {
+      "name": "report list filter, detail and return",
+      "result": "passed"
+    },
+    {
+      "name": "account filter preserves separate Huabao / Yinhe accounts",
+      "result": "passed"
+    },
+    {
+      "name": "holding fields expand and holding detail returns",
+      "result": "passed"
+    },
+    {
+      "name": "hide / reveal demo amounts",
+      "result": "passed"
+    },
+    {
+      "name": "data status and future integration placeholders",
+      "result": "passed"
+    },
+    {
+      "name": "unknown routes show recoverable empty states",
+      "result": "passed"
+    },
+    {
+      "name": "skip link focuses content without changing application route",
+      "result": "passed"
+    },
+    {
+      "name": "PWA manifest and local icons",
+      "result": "passed"
+    },
+    {
+      "name": "localhost service worker supports offline demo navigation",
+      "result": "passed"
+    },
+    {
+      "name": "direct file preview remains interactive without server",
+      "result": "skipped",
+      "reason": "Managed browser policy blocks file://; use verified localhost preview. Direct-file operation was not verified."
+    },
+    {
+      "name": "no unexpected browser exceptions or external data requests",
+      "result": "passed"
+    }
+  ],
+  "browserErrors": [],
+  "securityErrors": [],
+  "renderingErrors": [],
+  "consoleErrors": [],
+  "externalRequests": []
+}
