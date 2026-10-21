@@ -21,6 +21,11 @@ class PreviewTests(unittest.TestCase):
         cls.original_root = preview.PUBLIC_ROOT
         preview.PUBLIC_ROOT = Path(cls.directory.name) / "demo"
         preview.PUBLIC_ROOT.mkdir()
+        # Match production PUBLIC_ROOT (__file__.resolve().parent). Windows
+        # temporary roots may contain an 8.3 alias such as RUNNER~1; resolve that
+        # existing root before comparing each asset's canonical path. The asset
+        # symlink rejection in PreviewHandler and its regression test stay intact.
+        preview.PUBLIC_ROOT = preview.PUBLIC_ROOT.resolve(strict=True)
         for name in preview.PUBLIC_FILES:
             target = preview.PUBLIC_ROOT / name
             target.parent.mkdir(exist_ok=True, parents=True)
