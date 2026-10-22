@@ -28,6 +28,8 @@ jobs:
           python-version: '3.12'
       - run: python -m pip install -r p1/requirements-sina.txt
       - working-directory: p1
+        run: python -c "from goose_research.sina import _check_runtime_dependencies; _check_runtime_dependencies()"
+      - working-directory: p1
         run: python -m unittest discover -s tests -p test_sina_codec.py -v
       - working-directory: p1
         run: python -m unittest discover -s tests -v
