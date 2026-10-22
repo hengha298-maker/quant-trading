@@ -218,6 +218,19 @@ raise SystemExit(main(sys.argv[1:]))
         self.assertEqual(document['error_type'], 'URLError')
         self.assertNotIn('fictional offline test', records[0].read_text(encoding='utf-8'))
 
+    def test_original_research_suite_runs_from_zip_without_git(self):
+        # Reproduce the user's failing test, plus its whole original suite,
+        # under the actual ZIP/no-Git layout. Do not copy this test recursively.
+        shutil.copytree(P1 / 'goose_research', self.source / 'p1' / 'goose_research',
+                        ignore=shutil.ignore_patterns('__pycache__'))
+        (self.source / 'p1' / 'tests').mkdir()
+        shutil.copy2(P1 / 'tests' / 'test_p1.py', self.source / 'p1' / 'tests' / 'test_p1.py')
+        result = subprocess.run([sys.executable, '-m', 'unittest', 'discover', '-s', 'tests', '-v'],
+                                cwd=self.source / 'p1', env=self.no_git_environment(), capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stderr.decode('utf-8', errors='replace'))
+        self.assertIn('test_guard_rejects_private_artifacts', result.stderr.decode('utf-8'))
+        self.assertIn('Ran 14 tests', result.stderr.decode('utf-8'))
+
 
 if __name__ == '__main__':
     unittest.main()

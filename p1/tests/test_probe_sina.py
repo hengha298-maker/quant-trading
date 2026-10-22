@@ -14,7 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from goose_research import market, probe_sina as probe, sina
 
 
-BODY = b'var KLC_KL_sh515450="FICTIONAL+PAYLOAD/123";'
+BODY = b'var KLC_KL_sh515450="HX/FICTIONAL+PAYLOAD/123";'
 NOW = datetime(2025, 1, 6, 9, 0, tzinfo=timezone.utc)
 
 
@@ -26,12 +26,14 @@ def bars():
 class Response:
     status = 200
     headers = {}
+    def __init__(self, body=BODY):
+        self.body = body
     def __enter__(self):
         return self
     def __exit__(self, *_args):
         pass
     def read(self, limit):
-        return BODY[:limit]
+        return self.body[:limit]
     def geturl(self):
         return sina.URL
 
@@ -47,7 +49,7 @@ class Frame:
         return copy.deepcopy(self.data)
 
 
-def fake_api_runtime(mutate=None, wrong_url=False):
+def fake_api_runtime(mutate=None, wrong_url=False, body=BODY):
     """Shape-equivalent API test double: transport, decoder and sorted DataFrame."""
     transport = types.SimpleNamespace(get=lambda *_a, **_k: (_ for _ in ()).throw(AssertionError('unpatched transport')))
     class Engine:
@@ -55,7 +57,7 @@ def fake_api_runtime(mutate=None, wrong_url=False):
             if script != 'LOCAL STATIC DECODER' or kwargs != {'timeout': 5000, 'max_memory': 128 * 1024 * 1024}:
                 raise AssertionError('unbounded script')
         def call(self, name, payload, **kwargs):
-            if name != 'd' or payload != 'FICTIONAL+PAYLOAD/123' or kwargs != {'timeout': 5000, 'max_memory': 128 * 1024 * 1024}:
+            if name != 'd' or payload != body.decode().split('="')[1].split('"')[0] or kwargs != {'timeout': 5000, 'max_memory': 128 * 1024 * 1024}:
                 raise AssertionError('unbounded payload')
             return bars()
     runtime = types.SimpleNamespace(MiniRacer=Engine)
@@ -63,6 +65,8 @@ def fake_api_runtime(mutate=None, wrong_url=False):
         if symbol != 'sh515450':
             raise AssertionError('wrong symbol')
         response = transport.get('https://example.invalid/' if wrong_url else sina.URL)
+        if response.text != body.decode():
+            raise AssertionError('original API must see exact downloaded response')
         engine = runtime.MiniRacer()
         engine.eval('LOCAL STATIC DECODER')
         result = engine.call('d', response.text.split('=')[1].split(';')[0].replace('"', ''))
@@ -83,16 +87,17 @@ def worker_summary(**kwargs):
 
 class SinaProbeTests(unittest.TestCase):
     def test_original_api_shape_is_called_and_matches_every_raw_row(self):
-        api_parts, runtime = fake_api_runtime()
-        with patch.object(probe, '_original_api', return_value=api_parts), patch.object(sina, '_optional_runtime', return_value=runtime):
-            summary = probe._probe_worker('2022-01-06', '2025-01-06', probe.BASES[0],
-                opener=lambda *_a, **_k: Response(), now=NOW)
-        self.assertEqual(summary['api_checked'], 'akshare.fund_etf_hist_sina')
-        self.assertIs(summary['api_rows_match'], True)
-        self.assertEqual(summary['selected_count'], 3)
-        self.assertEqual(summary['adjustment'], 'unknown')
-        self.assertFalse(summary['gate_changed'])
-        self.assertEqual(summary['fetched_at'], NOW.isoformat())
+        for body in (BODY, b' \nvar KLC_K2_sh515450="K2/FICTIONAL+PAYLOAD/123";\n'):
+            api_parts, runtime = fake_api_runtime(body=body)
+            with self.subTest(body=body), patch.object(probe, '_original_api', return_value=api_parts), patch.object(sina, '_optional_runtime', return_value=runtime):
+                summary = probe._probe_worker('2022-01-06', '2025-01-06', probe.BASES[0],
+                    opener=lambda *_a, **_k: Response(body), now=NOW)
+            self.assertEqual(summary['api_checked'], 'akshare.fund_etf_hist_sina')
+            self.assertIs(summary['api_rows_match'], True)
+            self.assertEqual(summary['selected_count'], 3)
+            self.assertEqual(summary['adjustment'], 'unknown')
+            self.assertFalse(summary['gate_changed'])
+            self.assertEqual(summary['fetched_at'], NOW.isoformat())
 
     def test_api_different_price_missing_row_or_changed_date_fails(self):
         for mutate in [lambda rows: rows[0].update(close=1.16), lambda rows: rows.pop(),
@@ -100,13 +105,13 @@ class SinaProbeTests(unittest.TestCase):
             api_parts, runtime = fake_api_runtime(mutate)
             with self.subTest(mutate=mutate), patch.object(probe, '_original_api', return_value=api_parts), patch.object(sina, '_optional_runtime', return_value=runtime):
                 with self.assertRaises(probe.SinaApiMismatchError):
-                    probe._verify_original_api('FICTIONAL+PAYLOAD/123', sina._normalise_rows(bars()))
+                    probe._verify_original_api(sina._download(lambda *_a, **_k: Response()), sina._normalise_rows(bars()))
 
     def test_original_api_cannot_fall_back_to_other_network_url(self):
         api_parts, runtime = fake_api_runtime(wrong_url=True)
         with patch.object(probe, '_original_api', return_value=api_parts), patch.object(sina, '_optional_runtime', return_value=runtime):
             with self.assertRaises(sina.SinaResponseError):
-                probe._verify_original_api('FICTIONAL+PAYLOAD/123', sina._normalise_rows(bars()))
+                probe._verify_original_api(sina._download(lambda *_a, **_k: Response()), sina._normalise_rows(bars()))
 
     def test_invalid_raw_order_fails_before_api_sorting(self):
         raw = bars(); raw.reverse()
@@ -129,6 +134,7 @@ class SinaProbeTests(unittest.TestCase):
             summary = worker_summary(); summary['expected_last_date'] = expected; summary['selected_end'] = expected
             if expected == '2025-01-03':
                 summary['selected_count'] = 2
+                summary['last_bar'] = sina._normalise_rows(bars())[1]
             def runner(command, **kwargs):
                 self.assertEqual(command[-2:], [expected, probe.BASES[0]])
                 self.assertEqual(kwargs['timeout'], 45)
@@ -148,7 +154,8 @@ class SinaProbeTests(unittest.TestCase):
             raise subprocess.TimeoutExpired('private command', 45)
         with self.assertRaises(sina.SinaTimeoutError):
             probe.probe(runner=timeout, now=NOW)
-        for code, error in [('dependency', sina.SinaDependencyError), ('api_mismatch', probe.SinaApiMismatchError), ('stale', probe.SinaStaleDataError)]:
+        for code, error in [('dependency', sina.SinaDependencyError), ('api_mismatch', probe.SinaApiMismatchError),
+                            ('stale', probe.SinaStaleDataError), ('encoding', sina.SinaEncodingError)]:
             def runner(_command, **kwargs):
                 kwargs['stdout'].write(json.dumps({'error': code}).encode())
                 return types.SimpleNamespace(returncode=1)
@@ -182,6 +189,20 @@ class SinaProbeTests(unittest.TestCase):
                 kwargs['stdout'].write(raw)
                 return types.SimpleNamespace(returncode=0)
             with self.subTest(size=len(raw)), self.assertRaises(sina.SinaResponseError):
+                probe.probe(runner=runner, now=NOW)
+
+    def test_parent_rechecks_encoding_boundary_prices_dates_and_counts(self):
+        for mutate in [lambda s: s['encoding'].update(wrapper='KLC_K2_sh515450'),
+                       lambda s: s['encoding'].update(version=True),
+                       lambda s: s['last_bar'].update(close='99'),
+                       lambda s: s['last_bar'].update(time='2025-01-03'),
+                       lambda s: s.update(selected_count=1),
+                       lambda s: s.update(raw_count=1)]:
+            summary = worker_summary(); mutate(summary)
+            def runner(_command, **kwargs):
+                kwargs['stdout'].write(json.dumps(summary).encode())
+                return types.SimpleNamespace(returncode=0)
+            with self.subTest(mutate=mutate), self.assertRaises(sina.SinaError):
                 probe.probe(runner=runner, now=NOW)
 
     def test_utf8_chinese_summary_works_with_cp1252_redirected_stdout(self):

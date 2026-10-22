@@ -152,10 +152,15 @@ class ResearchTests(unittest.TestCase):
 
     def test_guard_rejects_private_artifacts(self):
         from check_private import check
-        with patch('check_private.subprocess.check_output', return_value=b'notes.csv\0'):
-            self.assertEqual(check(), 1)
-        with patch('check_private.subprocess.check_output', return_value=b'config.example.json\0p1/goose_research/market.py\0'):
-            self.assertEqual(check(True), 0)
+        # A unit test of Git mode must supply its own metadata marker; the
+        # user's source may be a ZIP with no .git or Git executable at all.
+        source = Path(self.tmp.name) / 'fictional-source'
+        (source / '.git').mkdir(parents=True)
+        with patch('check_private.REPO', source):
+            with patch('check_private.subprocess.check_output', return_value=b'notes.csv\0'):
+                self.assertEqual(check(), 1)
+            with patch('check_private.subprocess.check_output', return_value=b'config.example.json\0p1/goose_research/market.py\0'):
+                self.assertEqual(check(True), 0)
 
     def test_non_utf8_redirected_console(self):
         env = dict(os.environ, PYTHONIOENCODING='cp1252')

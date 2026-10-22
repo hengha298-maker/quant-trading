@@ -17,10 +17,11 @@ import re
 import subprocess
 import sys
 import tempfile
+from typing import NamedTuple
 from urllib.error import HTTPError, URLError
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
-from .validation import day, fields, number, timestamp
+from .validation import SINA_CODECS, day, fields, number, timestamp, validate_sina_encoding
 
 URL = 'https://finance.sina.com.cn/realstock/company/sh515450/hisdata_klc2/klc_kl.js'
 AKSHARE_VERSION = '1.19.1'
@@ -32,6 +33,7 @@ JS_TIMEOUT_MS = 5_000
 JS_MEMORY_BYTES = 128 * 1024 * 1024
 VOLUME_UNIT = '源站原始值（AKShare文档称手，未核验）'
 ADJUSTMENT_NOTE = '未在客户端复权；服务端口径待核验'
+ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
 
 
 class SinaError(ValueError):
@@ -51,8 +53,28 @@ class SinaResponseError(SinaError):
     pass
 
 
+class SinaEncodingError(SinaError):
+    pass
+
+
 class SinaDecodeError(SinaError):
     pass
+
+
+class Download(NamedTuple):
+    compressed: str
+    text: str
+    response_sha256: str
+    encoding: dict
+
+
+def _encoding_header(payload):
+    # Sina's stream is NOT ordinary Base64. Each alphabet index contributes
+    # six little-endian bits: first 12 bits select a decoder, next 6 XOR 63
+    # give its version. The AKShare 1.19.1 d() dispatcher uses this exact rule.
+    if not isinstance(payload, str) or len(payload) < 4 or re.fullmatch(r'[A-Za-z0-9+/]+', payload) is None:
+        raise SinaEncodingError()
+    return ALPHABET.index(payload[0]) | (ALPHABET.index(payload[1]) << 6), 63 ^ ALPHABET.index(payload[2])
 
 
 class _NoRedirect(HTTPRedirectHandler):
@@ -99,10 +121,15 @@ def _download(opener=None):
     except UnicodeError:
         raise SinaResponseError() from None
     # Full-match rejects a different symbol, truncated wrappers and appended JS.
-    match = re.fullmatch(r'\s*var\s+KLC_KL_sh515450\s*=\s*"([A-Za-z0-9+/=]+)"\s*;\s*', body)
+    match = re.fullmatch(r'\s*var\s+(KLC_K(?:L|2)_sh515450)\s*=\s*"([A-Za-z0-9+/]+)"\s*;\s*', body)
     if match is None:
         raise SinaResponseError()
-    return match.group(1), hashlib.sha256(raw).hexdigest()
+    wrapper, compressed = match.groups()
+    codec, version = _encoding_header(compressed)
+    if (codec, version) != SINA_CODECS[wrapper]:
+        raise SinaEncodingError()
+    encoding = dict(wrapper=wrapper, codec=codec, version=version, response_bytes=len(raw))
+    return Download(compressed, body, hashlib.sha256(raw).hexdigest(), encoding)
 
 
 def _optional_runtime():
@@ -169,15 +196,16 @@ def _normalise_rows(decoded):
 
 def _fetch_worker(symbol, begin, end, opener=None, decoder=None):
     begin, end = _bounds(symbol, begin, end)
-    compressed, response_hash = _download(opener)
-    rows = _normalise_rows((decoder or _decode_payload)(compressed))
+    downloaded = _download(opener)
+    rows = _normalise_rows((decoder or _decode_payload)(downloaded.compressed))
     # Validate the entire original history before clipping: an invalid old row
     # cannot disappear merely because it lies outside the requested interval.
     selected = [row for row in rows if begin <= row['time'] <= end]
     if not selected:
         raise SinaDecodeError()
     return dict(rows=selected, raw_start=rows[0]['time'], raw_end=rows[-1]['time'], raw_count=len(rows),
-                response_sha256=response_hash, requested_url=URL, decoder='akshare-' + AKSHARE_VERSION,
+                response_sha256=downloaded.response_sha256, encoding=downloaded.encoding,
+                requested_url=URL, decoder='akshare-' + AKSHARE_VERSION,
                 volume_unit=VOLUME_UNIT, adjustment='unknown', adjustment_note=ADJUSTMENT_NOTE)
 
 
@@ -197,7 +225,8 @@ def _reject_constant(_value):
 def _validate_result(result, begin, end):
     try:
         fields(result, ('rows', 'raw_start', 'raw_end', 'raw_count', 'response_sha256',
-                        'requested_url', 'decoder', 'volume_unit', 'adjustment', 'adjustment_note'))
+                        'requested_url', 'decoder', 'volume_unit', 'adjustment', 'adjustment_note', 'encoding'))
+        validate_sina_encoding(result['encoding'])
         if (result['requested_url'] != URL or result['decoder'] != 'akshare-' + AKSHARE_VERSION or
                 result['volume_unit'] != VOLUME_UNIT or result['adjustment'] != 'unknown' or
                 result['adjustment_note'] != ADJUSTMENT_NOTE or
@@ -258,7 +287,7 @@ def fetch_sina_rows(symbol, begin, end, runner=subprocess.run):
     try:
         result = json.loads(raw, object_pairs_hook=_unique_pairs, parse_constant=_reject_constant)
         if completed.returncode != 0:
-            errors = {'dependency': SinaDependencyError, 'timeout': SinaTimeoutError,
+            errors = {'dependency': SinaDependencyError, 'timeout': SinaTimeoutError, 'encoding': SinaEncodingError,
                       'response': SinaResponseError, 'decode': SinaDecodeError}
             if isinstance(result, dict) and set(result) == {'error'} and result['error'] in errors:
                 raise errors[result['error']]()
@@ -284,7 +313,7 @@ def _main(argv=None):
         sys.stdout.buffer.write(raw)
         return 0
     except Exception as exc:
-        category = 'dependency' if isinstance(exc, SinaDependencyError) else 'timeout' if isinstance(exc, SinaTimeoutError) else 'decode' if isinstance(exc, SinaDecodeError) else 'response'
+        category = 'dependency' if isinstance(exc, SinaDependencyError) else 'timeout' if isinstance(exc, SinaTimeoutError) else 'encoding' if isinstance(exc, SinaEncodingError) else 'decode' if isinstance(exc, SinaDecodeError) else 'response'
         sys.stdout.buffer.write(json.dumps({'error': category}).encode('ascii'))
         return 1
 

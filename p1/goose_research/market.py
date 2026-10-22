@@ -148,6 +148,8 @@ def _sina(symbol, begin, end, now, expected, basis, fetcher=None):
             response_sha256=raw['response_sha256'], decoder=raw['decoder'],
             raw_start=raw['raw_start'], raw_end=raw['raw_end'], raw_count=raw['raw_count'],
             volume_unit=raw['volume_unit'], adjustment_verified=False, raw_order_verified=True)
+        if 'encoding' in raw:
+            result['provenance']['encoding'] = raw['encoding']
         return _observed(result, raw['rows'], now, expected, basis)
     except Exception as exc:
         # Revert unverified adjustment label if no valid provenance remains.

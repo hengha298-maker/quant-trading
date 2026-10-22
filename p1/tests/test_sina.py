@@ -17,7 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from goose_research import sina
 
 
-BODY = b'var KLC_KL_sh515450="FAKE+ABC/123=";\n'
+BODY = b'var KLC_KL_sh515450="HX/FAKE+ABC/123";\n'
 
 
 class Response:
@@ -52,6 +52,29 @@ def fake_worker(decoded=None, response=None, begin='2025-01-03', end='2025-01-06
 
 
 class SinaCandidateTests(unittest.TestCase):
+    def test_both_known_wrappers_bind_the_exact_symbol_and_encoding_header(self):
+        for wrapper, payload, codec in [('KLC_KL_sh515450', 'HX/FICTIONAL', 1479),
+                                        ('KLC_K2_sh515450', 'K2/3rPXFICTIONAL', 3466)]:
+            body = ('var ' + wrapper + '="' + payload + '";').encode()
+            downloaded = sina._download(lambda *_a, **_k: Response(body=body))
+            self.assertEqual(downloaded.text.encode(), body)
+            self.assertEqual(downloaded.compressed, payload)
+            self.assertEqual(downloaded.encoding, dict(wrapper=wrapper, codec=codec, version=0, response_bytes=len(body)))
+
+    def test_unknown_codec_version_or_wrapper_payload_mismatch_fails_before_decode(self):
+        for wrapper, payload in [('KL', 'K2/3rPX'), ('K2', 'HX/FICTIONAL'), ('K2', 'K2+3rPX'),
+                                 ('K2', 'AAA3rPX'), ('K2', 'K2/'), ('KL', 'HX/FAKE=')]:
+            body = ('var KLC_' + wrapper + '_sh515450="' + payload + '";').encode()
+            with self.subTest(wrapper=wrapper, payload=payload), self.assertRaises(sina.SinaError):
+                sina._fetch_worker('515450.SH', '2025-01-02', '2025-01-06',
+                    opener=lambda *_a, **_k: Response(body=body), decoder=lambda _s: self.fail('must reject before decoder'))
+
+    def test_k2_wrong_symbol_or_multiple_assignments_are_rejected(self):
+        for body in [b'var KLC_K2_sh600900="K2/AAAA";', b'var KLC_K2_sz515450="K2/AAAA";',
+                     b'var KLC_K2_sh515450="K2/AAAA";var x=1;', b'var KLC_K3_sh515450="K2/AAAA";']:
+            with self.subTest(body=body), self.assertRaises(sina.SinaResponseError):
+                sina._download(lambda *_a, **_k: Response(body=body))
+
     def test_whole_history_validated_then_explicitly_clipped_without_sorting(self):
         result = fake_worker()
         self.assertEqual([r['time'] for r in result['rows']], ['2025-01-03', '2025-01-06'])
@@ -193,11 +216,12 @@ class SinaCandidateTests(unittest.TestCase):
             raise subprocess.TimeoutExpired('never expose command', 45)
         with self.assertRaises(sina.SinaTimeoutError):
             sina.fetch_sina_rows('515450.SH', '2025-01-03', '2025-01-06', runner=timeout)
-        def missing(_command, **kwargs):
-            kwargs['stdout'].write(b'{"error":"dependency"}')
-            return types.SimpleNamespace(returncode=1)
-        with self.assertRaises(sina.SinaDependencyError):
-            sina.fetch_sina_rows('515450.SH', '2025-01-03', '2025-01-06', runner=missing)
+        for category, error in [('dependency', sina.SinaDependencyError), ('encoding', sina.SinaEncodingError)]:
+            def missing(_command, **kwargs):
+                kwargs['stdout'].write(json.dumps({'error': category}).encode())
+                return types.SimpleNamespace(returncode=1)
+            with self.subTest(category=category), self.assertRaises(error):
+                sina.fetch_sina_rows('515450.SH', '2025-01-03', '2025-01-06', runner=missing)
 
     def test_outer_rejects_large_invalid_duplicate_and_nonfinite_protocol(self):
         for body in [b'x' * (sina.MAX_BYTES + 1), b'not json', b'{"rows":[],"rows":[]}', b'{"rows":NaN}']:
@@ -210,6 +234,7 @@ class SinaCandidateTests(unittest.TestCase):
     def test_outer_rechecks_worker_identity_metadata_and_rows(self):
         for mutate in [lambda result: result.update(requested_url='http://wrong.invalid'),
                        lambda result: result.update(decoder='unversioned'),
+                       lambda result: result['encoding'].update(codec=1478),
                        lambda result: result['rows'].reverse(),
                        lambda result: result['rows'][0].update(close='99'),
                        lambda result: result.update(response_sha256='bad'),

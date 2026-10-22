@@ -6,7 +6,7 @@
 
 东方财富接口保留。已增加独立的新浪日线候选适配器、回退路径及脱敏探测命令，但**尚未取得真实新浪响应，备用源保持未启用**：本轮环境的出口代理拒绝访问 `finance.sina.com.cn`（403）。不能把离线测试通过写成真实行情验证成功。当前主源失败时保存 `unavailable`，并明确记录新浪为 `skipped / SourceNotVerified`，不产生交易建议。
 
-Windows / 无 Git 的 ZIP 用户可直接按 [新浪核验新手指南](SINA-VERIFICATION.md) 执行。默认 P1 及离线测试仍只需 Python 标准库；仅独立新浪探测需要在源码和 V1.1 之外安装固定的可选依赖。详细改动、真实验证边界见 [ETF 备用源验证记录](../docs/P1-ETF-FALLBACK.md)。
+Windows / 无 Git 的 ZIP 用户可直接按 [新浪核验新手指南](SINA-VERIFICATION.md) 执行。最新修复已支持并核对K2/3466与旧KL/1479两种编码，原API比较保留原始正文；ZIP下原有测试对`.git`的隐式依赖已移除。真实解码器测试使用人工编码样本，不能冒充515450真实响应。默认 P1 及离线测试仍只需 Python 标准库，可选真实解码器测试会明确跳过；独立新浪探测需要在源码和 V1.1 之外安装固定的可选依赖。详见 [K2修复与验证记录](../docs/P1-SINA-K2.md) 和 [ETF备用源首轮记录](../docs/P1-ETF-FALLBACK.md)。
 
 ## Windows Python 3.12
 

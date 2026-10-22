@@ -46,6 +46,7 @@ def candidate(rows=None):
     return dict(rows=copy.deepcopy(rows), requested_url=sina.URL,
                 raw_start='2026-10-16', raw_end='2026-10-19', raw_count=max(2, len(rows)),
                 response_sha256='a' * 64, decoder='akshare-1.19.1',
+                encoding=dict(wrapper='KLC_K2_sh515450', codec=3466, version=0, response_bytes=128),
                 volume_unit='源站原始值（AKShare文档称手，未核验）')
 
 
@@ -92,6 +93,7 @@ class FallbackTests(unittest.TestCase):
             dict(provider='eastmoney', status='unavailable', error_type='RemoteDisconnected'),
             dict(provider='sina', status='observed')])
         self.assertEqual(result['provenance']['symbol'], 'sh515450')
+        self.assertEqual(result['provenance']['encoding'], candidate()['encoding'])
         self.assertFalse(result['provenance']['adjustment_verified'])
         self.secondary.assert_called_once_with('515450.SH', date(2023, 10, 19), date(2026, 10, 19))
         self.assertNotIn(SENSITIVE, json.dumps(result))
@@ -278,6 +280,7 @@ class ProvenanceAndReportTests(unittest.TestCase):
             ('provenance.raw_start', '2026-10-20'), ('provenance.raw_end', '2099-01-01'),
             ('provenance.volume_unit', 'shares'), ('provenance.adjustment_verified', True),
             ('provenance.raw_order_verified', False), ('freshness.checked_at', '2026-10-18T09:00:00+00:00'),
+            ('provenance.encoding', dict(wrapper='KLC_K2_sh515450', codec=1479, version=0, response_bytes=128)),
             ('freshness.latest_date', '2026-10-16'), ('freshness.calendar_verified', True),
             ('freshness.state', 'live'), ('freshness.basis', 'exchange_verified'),
         ]
@@ -341,10 +344,16 @@ class ProvenanceAndReportTests(unittest.TestCase):
                    rows=[bar('2026-10-16'), bar()], count=2,
                    observed_start='2026-10-16', observed_end='2026-10-19', stale=False)
         self.assertIs(validate_market(old), old)
+        old_candidate = self.observed()
+        old_candidate['provenance'].pop('encoding')
+        self.assertIs(validate_market(old_candidate), old_candidate)
         with tempfile.TemporaryDirectory() as directory:
             base = storage.initialize(Path(directory) / 'local-private', True)
             saved = storage.save(base, 'market', old)
             self.assertEqual(storage.read_private(saved, base, 'market'), old)
+            new_candidate = self.observed()
+            saved = storage.save(base, 'market', new_candidate)
+            self.assertEqual(storage.read_private(saved, base, 'market'), new_candidate)
 
     def test_unknown_adjustment_displays_facts_but_never_calculates_fees(self):
         with patch.object(report, 'scenario', side_effect=AssertionError('fees must not run')) as fees:

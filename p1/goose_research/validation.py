@@ -8,6 +8,7 @@ from decimal import Decimal, InvalidOperation
 import re
 
 BJ = timezone(timedelta(hours=8))
+SINA_CODECS = {'KLC_KL_sh515450': (1479, 0), 'KLC_K2_sh515450': (3466, 0)}
 
 
 def require(condition, message='数据结构或字段无效'):
@@ -18,6 +19,15 @@ def require(condition, message='数据结构或字段无效'):
 def fields(obj, required, optional=()):
     require(isinstance(obj, dict))
     require(set(required) <= obj.keys() <= set(required) | set(optional), '缺少必要字段或含未知字段')
+
+
+def validate_sina_encoding(info):
+    fields(info, ('wrapper', 'codec', 'version', 'response_bytes'))
+    require(isinstance(info['wrapper'], str) and info['wrapper'] in SINA_CODECS)
+    require(type(info['codec']) is int and type(info['version']) is int)
+    require((info['codec'], info['version']) == SINA_CODECS[info['wrapper']], '新浪包装与编码不一致或不支持')
+    require(type(info['response_bytes']) is int and 0 < info['response_bytes'] <= 8_000_000)
+    return info
 
 
 def text(value, limit=128):
@@ -189,7 +199,9 @@ def validate_market(doc):
     if 'provenance' in doc:
         provenance = doc['provenance']
         fields(provenance, ('provider', 'symbol', 'response_sha256', 'decoder', 'raw_start', 'raw_end',
-                            'raw_count', 'volume_unit', 'adjustment_verified', 'raw_order_verified'))
+                            'raw_count', 'volume_unit', 'adjustment_verified', 'raw_order_verified'), ('encoding',))
+        if 'encoding' in provenance:
+            validate_sina_encoding(provenance['encoding'])
         require(provenance['provider'] == 'sina' and provenance['symbol'] == 'sh515450')
         require(doc['symbol'] == '515450.SH' and doc['interval'] == 'daily' and
                 doc['source'] == '新浪公开日线（AKShare 固定解码器）')

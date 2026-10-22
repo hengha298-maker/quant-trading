@@ -2,6 +2,30 @@
 
 这份指南只用于独立测试公开行情，不需要券商账号、持仓文件、Bark 密钥或其他凭证。原有 V1.1 定时任务、SQLite 数据库、Bark 配置和已安装环境保持不动。P1 的一般用法见 [README.md](README.md)。
 
+## K2 修复版：重新下载后最快复验
+
+从[原PR分支下载ZIP](https://github.com/hengha298-maker/quant-trading/archive/refs/heads/codex/goose-v2-p1-readonly.zip)，解压到**新的独立目录**，进入其中的 `p1` 文件夹，在资源管理器地址栏输入 `powershell` 并回车。不要覆盖 V1.1 或旧数据目录。
+
+先运行不需要 Git 的完整测试：
+
+```powershell
+py -3.12 -m unittest discover -s tests -v
+```
+
+此前已按本指南安装新浪工具时，复制下面三行：
+
+```powershell
+$P1SinaPython = Join-Path $env:LOCALAPPDATA 'GooseP1SinaTools-1.19.1\Scripts\python.exe'
+& $P1SinaPython -m unittest discover -s tests -p test_sina_codec.py -v
+& $P1SinaPython -m goose_research.probe_sina
+```
+
+如果找不到这个解释器，先完成下文“二、安装独立的新浪探测工具”。真实解码器专项应为6项通过；未安装可选工具时，普通完整测试会跳过其中5项，不能算作解码验证通过。
+
+探测成功时会显示 `KLC_K2_sh515450 / 3466 / 版本0`（或支持的旧KL格式）、真实响应字节数、原始/选定条数与日期、首末日开高低收、采集时间和SHA256。**17915是字节数，不是日线条数**；仅HTTP200或出现K2变量名不能算成功。失败继续显示 `unavailable`，不启用备用源。可回传这些公开摘要，不需要持仓或私人路径。
+
+编码区别、真实解码器实验和ZIP修复证据见 [K2修复说明](../docs/P1-SINA-K2.md)。
+
 ## 先了解当前状态
 
 **新浪候选源尚未完成真实网络验收，当前严格未启用。** 本轮开发环境访问 `finance.sina.com.cn` 遇到代理 `403 Forbidden`；用户授权联网和执行环境的网络权限，并不等于出口代理的目标域名白名单已经生效。这次失败不能说明你的电脑也一定失败，也不能写成已经成功取得新浪行情。
@@ -64,7 +88,7 @@ Write-Host "probe退出码：$P1ProbeExit"
 
 探测不接受 `--data-dir`，不读取持仓、Bark 或 V1 数据，不在你的持仓／行情目录保存记录，不修改源门禁。它只输出公开行情的脱敏摘要。
 
-探测会下载绑定到 `sh515450` 的真实响应，检查其完整包装和原始日期严格升序、无重复、OHLC 与数值，再与固定版本的原 `akshare.fund_etf_hist_sina` API 逐条比较。比较在隔离子进程中传递**同一个真实下载的压缩内容**，不会生成行情，也不会用虚构价格替代真实响应。先校验原始顺序，再核对 API 结果，避免 API 排序掩盖乱序。
+探测会下载绑定到 `sh515450` 的真实响应，检查其完整包装、压缩头的编码/版本以及原始日期严格升序、无重复、OHLC 与数值，再与固定版本的原 `akshare.fund_etf_hist_sina` API 逐条比较。原 API 收到**同一个真实下载正文，完整保留K2/KL包装**，不会改名或生成价格。先校验原始顺序，再核对 API 结果，避免 API 排序掩盖乱序。
 
 子进程总时限为 45 秒；下载超时为 15 秒、响应上限为 8 MB；每次本地 JavaScript 解码调用限制为 5 秒和 128 MiB。不会执行源站返回的任意脚本，只向本地固定解码器传入经过包装检查的压缩内容。
 
@@ -75,7 +99,7 @@ Write-Host "probe退出码：$P1ProbeExit"
 | `probe退出码：0` | 这一次响应绑定、数据结构、原 API 一致性及要求截至日期通过检查 | 仅回传脱敏摘要，等待维护者审核；门禁仍不变 |
 | 非零，显示 `unavailable` | 本次未取得通过核验的结果，不能用作行情或研究输入 | 保留不可用状态，根据错误类别核对依赖、网络或日期，不修改门禁 |
 
-常见类别：`SinaDependencyError` 表示依赖缺失或版本不符；`SinaResponseError` 表示下载、包装或响应检查未通过，也可能是代理拒绝；`SinaTimeoutError` 为超时；`SinaDecodeError` 为解码或数据结构不符合要求；`SinaApiMismatchError` 为与原 API 不一致；`SinaStaleDataError` 为未达到要求截至日。终端不会打印底层私密错误全文。
+常见类别：`SinaDependencyError` 表示依赖缺失或版本不符；`SinaResponseError` 表示下载、包装或响应检查未通过，也可能是代理拒绝；`SinaEncodingError` 为编码/版本不支持或与包装不一致；`SinaTimeoutError` 为超时；`SinaDecodeError` 为解码或数据结构不符合要求；`SinaApiMismatchError` 为与原 API 不一致；`SinaStaleDataError` 为未达到要求截至日。终端不会打印底层私密错误全文。
 
 即使退出 0，**复权口径仍是 `unknown`，成交量保留源站原值**；AKShare 文档称成交量单位为“手”，本项目尚未核验，不擅自乘除 100。不能据此宣布数据三年完整、费用可用或策略有效。报告对复权口径未核验的备用源只展示行情事实，不把它送入费用参考计算。
 

@@ -19,7 +19,7 @@ import tempfile
 from unittest.mock import patch
 
 from . import market, sina
-from .validation import day, fields, number
+from .validation import day, fields, number, validate_sina_encoding
 
 API = 'akshare.fund_etf_hist_sina'
 BASES = ('conservative_weekday_not_exchange_calendar', 'user_confirmed_date_not_calendar_verification')
@@ -49,7 +49,8 @@ def _original_api():
         raise sina.SinaDependencyError() from None
 
 
-def _verify_original_api(compressed, raw_rows):
+def _verify_original_api(downloaded, raw_rows):
+    compressed = downloaded.compressed
     api, transport, runtime = _original_api()
     static_script, factory = sina._optional_runtime()
     calls = {'get': 0, 'eval': 0, 'call': 0}
@@ -58,8 +59,9 @@ def _verify_original_api(compressed, raw_rows):
         if url != sina.URL or args or kwargs or calls['get']:
             raise sina.SinaResponseError()
         calls['get'] += 1
-        # Only a wrapper around the already downloaded, identity-bound payload.
-        return type('DownloadedResponse', (), {'text': 'var KLC_KL_sh515450="' + compressed + '";'})()
+        # Preserve the EXACT downloaded body, including K2/KL wrapper. Renaming
+        # the wrapper here would conceal API incompatibility with the real body.
+        return type('DownloadedResponse', (), {'text': downloaded.text})()
 
     class BoundedMiniRacer:
         def __init__(self):
@@ -112,17 +114,18 @@ def _probe_worker(begin, expected, basis, *, opener=None, decoder=None, verifier
     begin, expected = sina._bounds('515450.SH', begin, expected)
     if basis not in BASES:
         raise sina.SinaResponseError()
-    compressed, response_hash = sina._download(opener)
-    raw_rows = sina._normalise_rows((decoder or sina._decode_payload)(compressed))
+    downloaded = sina._download(opener)
+    raw_rows = sina._normalise_rows((decoder or sina._decode_payload)(downloaded.compressed))
     # The original unmodified sequence is validated before the API is allowed to
     # sort it. The API must then agree with every validated original row.
-    if (verifier or _verify_original_api)(compressed, raw_rows) is not True:
+    if (verifier or _verify_original_api)(downloaded, raw_rows) is not True:
         raise SinaApiMismatchError()
     selected = [row for row in raw_rows if begin <= row['time'] <= expected]
     if not selected or selected[-1]['time'] != expected:
         raise SinaStaleDataError()
     return dict(status='observed', symbol='515450.SH', api_checked=API, api_rows_match=True,
-                response_sha256=response_hash, raw_start=raw_rows[0]['time'], raw_end=raw_rows[-1]['time'],
+                response_sha256=downloaded.response_sha256, encoding=downloaded.encoding,
+                first_bar=selected[0], last_bar=selected[-1], raw_start=raw_rows[0]['time'], raw_end=raw_rows[-1]['time'],
                 raw_count=len(raw_rows), selected_start=selected[0]['time'], selected_end=selected[-1]['time'],
                 selected_count=len(selected), fetched_at=market._clock(now).isoformat(), expected_last_date=expected,
                 date_basis=basis, requested_url=sina.URL, decoder='akshare-' + sina.AKSHARE_VERSION,
@@ -133,7 +136,9 @@ def _validate_summary(result, begin, expected, basis):
     try:
         fields(result, ('status', 'symbol', 'api_checked', 'api_rows_match', 'response_sha256', 'raw_start', 'raw_end',
                         'raw_count', 'selected_start', 'selected_end', 'selected_count', 'fetched_at', 'expected_last_date',
-                        'date_basis', 'requested_url', 'decoder', 'volume_unit', 'adjustment', 'calendar_verified', 'gate_changed'))
+                        'date_basis', 'requested_url', 'decoder', 'volume_unit', 'adjustment', 'calendar_verified', 'gate_changed',
+                        'encoding', 'first_bar', 'last_bar'))
+        validate_sina_encoding(result['encoding'])
         if (result['status'] != 'observed' or result['symbol'] != '515450.SH' or result['api_checked'] != API or
                 result['api_rows_match'] is not True or result['requested_url'] != sina.URL or
                 result['decoder'] != 'akshare-' + sina.AKSHARE_VERSION or result['volume_unit'] != sina.VOLUME_UNIT or
@@ -151,7 +156,17 @@ def _validate_summary(result, begin, expected, basis):
                 not begin <= result['selected_start'] <= result['selected_end'] == expected):
             raise sina.SinaResponseError()
         fetched = datetime.fromisoformat(result['fetched_at'])
-        if fetched.tzinfo is None or fetched > datetime.now(timezone.utc) or last > fetched.astimezone(market.BJ).date():
+        if fetched.tzinfo is None or fetched > datetime.now(timezone.utc) or raw_last > fetched.astimezone(market.BJ).date():
+            raise sina.SinaResponseError()
+        for bar, stamp in ((result['first_bar'], result['selected_start']), (result['last_bar'], result['selected_end'])):
+            fields(bar, ('time', 'open', 'high', 'low', 'close', 'volume'))
+            if bar['time'] != stamp:
+                raise sina.SinaResponseError()
+            original = dict(bar)
+            original['date'] = original.pop('time')
+            if sina._normalise_rows([original])[0] != bar:
+                raise sina.SinaResponseError()
+        if (first == last) != (result['selected_count'] == 1) or (raw_first == raw_last) != (result['raw_count'] == 1):
             raise sina.SinaResponseError()
     except sina.SinaError:
         raise
@@ -179,7 +194,7 @@ def probe(expected_last_date=None, *, runner=subprocess.run, now=None):
                 raise sina.SinaResponseError()
         result = json.loads(raw, object_pairs_hook=sina._unique_pairs, parse_constant=sina._reject_constant)
         if completed.returncode != 0:
-            errors = {'dependency': sina.SinaDependencyError, 'timeout': sina.SinaTimeoutError,
+            errors = {'dependency': sina.SinaDependencyError, 'timeout': sina.SinaTimeoutError, 'encoding': sina.SinaEncodingError,
                       'response': sina.SinaResponseError, 'decode': sina.SinaDecodeError,
                       'api_mismatch': SinaApiMismatchError, 'stale': SinaStaleDataError}
             if isinstance(result, dict) and set(result) == {'error'} and result['error'] in errors:
@@ -206,7 +221,7 @@ def _worker_main(argv):
         sys.stdout.buffer.write(raw)
         return 0
     except Exception as exc:
-        category = 'dependency' if isinstance(exc, sina.SinaDependencyError) else 'timeout' if isinstance(exc, sina.SinaTimeoutError) else 'api_mismatch' if isinstance(exc, SinaApiMismatchError) else 'stale' if isinstance(exc, SinaStaleDataError) else 'decode' if isinstance(exc, sina.SinaDecodeError) else 'response'
+        category = 'dependency' if isinstance(exc, sina.SinaDependencyError) else 'timeout' if isinstance(exc, sina.SinaTimeoutError) else 'encoding' if isinstance(exc, sina.SinaEncodingError) else 'api_mismatch' if isinstance(exc, SinaApiMismatchError) else 'stale' if isinstance(exc, SinaStaleDataError) else 'decode' if isinstance(exc, sina.SinaDecodeError) else 'response'
         sys.stdout.buffer.write(json.dumps({'error': category}).encode('ascii'))
         return 1
 
@@ -229,8 +244,14 @@ def _main(argv=None):
         result = probe(args.expected_last_date)
         print('新浪日线独立核验：通过（仅响应绑定、结构、API一致性与截至日）')
         print('证券：515450.SH；核对API：' + result['api_checked'])
+        encoding = result['encoding']
+        print('响应格式：' + encoding['wrapper'] + '；编码：' + str(encoding['codec']) +
+              '；版本：' + str(encoding['version']) + '；字节：' + str(encoding['response_bytes']))
         print('原始历史：' + result['raw_start'] + ' 至 ' + result['raw_end'] + '；' + str(result['raw_count']) + '条')
         print('选定区间：' + result['selected_start'] + ' 至 ' + result['selected_end'] + '；' + str(result['selected_count']) + '条')
+        for label, bar in (('区间首日', result['first_bar']), ('区间末日', result['last_bar'])):
+            print(label + '：' + bar['time'] + '；开/高/低/收：' + '/'.join(bar[k] for k in ('open', 'high', 'low', 'close')) +
+                  '；成交量原值：' + bar['volume'])
         print('要求截至：' + result['expected_last_date'] + '；采集时间：' + result['fetched_at'])
         print('日期依据：' + ('用户指定日期，非完整日历核验' if result['date_basis'] == BASES[1] else '北京时间16点后工作日候选，非完整交易所日历'))
         print('响应SHA256：' + result['response_sha256'])
