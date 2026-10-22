@@ -26,6 +26,7 @@ from .validation import SINA_CODECS, day, fields, number, timestamp, validate_si
 URL = 'https://finance.sina.com.cn/realstock/company/sh515450/hisdata_klc2/klc_kl.js'
 AKSHARE_VERSION = '1.19.1'
 MAX_BYTES = 8_000_000
+MAX_TRAILER_CHARS = 4096
 MAX_ROWS = 100_000
 DOWNLOAD_TIMEOUT = 15
 WORKER_TIMEOUT = 45
@@ -95,6 +96,25 @@ def _bounds(symbol, begin, end):
     return begin, end
 
 
+def _validate_trailer(tail):
+    """Only whitespace or ONE bounded, complete, non-nested block comment.
+
+    Validate the whole suffix; never remove comments globally or accept a
+    prefix while ignoring what follows it. Comment text is inert: the raw body
+    is retained for API comparison, and is never evaluated as JavaScript.
+    """
+    if len(tail) > MAX_TRAILER_CHARS:
+        raise SinaResponseError()
+    tail = tail.strip(' \t\r\n')
+    if not tail:
+        return
+    if not tail.startswith('/*') or tail.find('*/', 2) != len(tail) - 2:
+        raise SinaResponseError()
+    content = tail[2:-2]
+    if '/*' in content or any(not (c in '\t\r\n' or c.isprintable()) for c in content):
+        raise SinaResponseError()
+
+
 def _download(opener=None):
     opener = opener or build_opener(_NoRedirect()).open
     request = Request(URL, headers={'User-Agent': 'GooseResearch-P1-candidate/1.0'})
@@ -120,10 +140,12 @@ def _download(opener=None):
         body = raw.decode('utf-8-sig')
     except UnicodeError:
         raise SinaResponseError() from None
-    # Full-match rejects a different symbol, truncated wrappers and appended JS.
-    match = re.fullmatch(r'\s*var\s+(KLC_K(?:L|2)_sh515450)\s*=\s*"([A-Za-z0-9+/]+)"\s*;\s*', body)
+    # Anchor the complete assignment, then validate EVERY remaining character.
+    # Sina may append a block comment after the semicolon; it is not JS input.
+    match = re.match(r'\s*var\s+(KLC_K(?:L|2)_sh515450)\s*=\s*"([A-Za-z0-9+/]+)"\s*;', body)
     if match is None:
         raise SinaResponseError()
+    _validate_trailer(body[match.end():])
     wrapper, compressed = match.groups()
     codec, version = _encoding_header(compressed)
     if (codec, version) != SINA_CODECS[wrapper]:

@@ -34,9 +34,9 @@ NOW = datetime(2025, 1, 6, 9, tzinfo=timezone.utc)
 
 class Response:
     status = 200
-    def __init__(self, wrapper, payload):
+    def __init__(self, wrapper, payload, trailer=b''):
         # Whitespace deliberately retained to check the original body is used.
-        self.body = (' \nvar ' + wrapper + '="' + payload + '";\n').encode()
+        self.body = (' \nvar ' + wrapper + '="' + payload + '";\n').encode() + trailer
         self.headers = {'Content-Length': str(len(self.body))}
     def __enter__(self): return self
     def __exit__(self, *_args): pass
@@ -61,6 +61,31 @@ class HeaderTests(unittest.TestCase):
 
 @unittest.skipUnless(installed(), 'requires clean pinned Sina tools; absent/mismatched/conflicting runtimes; isolated P1 tools CI executes real decoder/API')
 class PinnedDecoderTests(unittest.TestCase):
+    def test_real_k2_with_trailing_comment_checks_prices_count_dates_and_api(self):
+        for wrapper, _codec, payload in FIXTURES[1:]:
+            response = Response(wrapper, payload, '\n/* 新浪日线；source=public; cache note */\n'.encode())
+            with self.subTest(payload=payload):
+                result = probe._probe_worker('2025-01-03', '2025-01-06', probe.BASES[0],
+                    opener=lambda *_a, **_k: response, now=NOW)
+                self.assertEqual((result['raw_start'], result['raw_end'], result['raw_count']),
+                                 ('2025-01-02', '2025-01-06', 3))
+                self.assertEqual(result['selected_count'], 2)
+                self.assertEqual(result['first_bar'], EXPECTED[1])
+                self.assertEqual(result['last_bar'], EXPECTED[2])
+                self.assertEqual(result['encoding']['codec'], 3466)
+                self.assertEqual(result['encoding']['response_bytes'], len(response.body))
+                self.assertTrue(result['api_rows_match'])
+                self.assertFalse(result['gate_changed'])
+                probe._validate_summary(result, '2025-01-03', '2025-01-06', probe.BASES[0])
+                with self.assertRaises(probe.SinaStaleDataError):
+                    probe._probe_worker('2025-01-03', '2025-01-07', probe.BASES[0],
+                        opener=lambda *_a, **_k: response, now=NOW)
+        # A legal comment is not a substitute for a complete, valid K2 stream.
+        response = Response('KLC_K2_sh515450', 'K2/AAAA', b'/* valid comment */')
+        with self.assertRaises(sina.SinaError):
+            probe._probe_worker('2025-01-03', '2025-01-06', probe.BASES[0],
+                opener=lambda *_a, **_k: response, now=NOW)
+
     def test_real_pinned_decoder_executes_both_families_with_known_prices_and_dates(self):
         for wrapper, codec, payload in FIXTURES:
             with self.subTest(wrapper=wrapper, codec=codec):

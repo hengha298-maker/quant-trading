@@ -2,6 +2,20 @@
 
 这份指南只用于独立测试公开行情，不需要券商账号、持仓文件、Bark 密钥或其他凭证。原有 V1.1 定时任务、SQLite 数据库、Bark 配置和已安装环境保持不动。P1 的一般用法见 [README.md](README.md)。
 
+## 尾部注释修复：已安装K2工具时的最短复验
+
+重新下载[原PR分支ZIP](https://github.com/hengha298-maker/quant-trading/archive/refs/heads/codex/goose-v2-p1-readonly.zip)，解压到新目录，进入 `p1`，在资源管理器地址栏输入 `powershell`。复用已有K2工具，无需重装依赖、激活环境或安装Git：
+
+```powershell
+$P1SinaPython = Join-Path $env:LOCALAPPDATA 'GooseP1SinaTools-K2-1.19.1\Scripts\python.exe'
+& $P1SinaPython -m unittest discover -s tests -p 'test_sina*.py' -v
+& $P1SinaPython -m goose_research.probe_sina
+```
+
+专项应为31项通过，包括合法/截断/恶意尾部、真实K2解码器和原API比较；跳过不能算通过。如果第二行失败，请先停下并保留结果。最后一行只做真实公开行情探测，不读取持仓、不保存数据、不启用备用源。回传探测的公开摘要和退出码即可，不需要私人文件。
+
+本次只兼容一个经严格验证的完整尾部块注释，规则及真实数据核验边界见 [尾部注释修复记录](../docs/P1-SINA-TRAILER.md)。
+
 ## K2 修复版：重新下载后最快复验
 
 从[原PR分支下载ZIP](https://github.com/hengha298-maker/quant-trading/archive/refs/heads/codex/goose-v2-p1-readonly.zip)，解压到**新的独立目录**，进入其中的 `p1` 文件夹，在资源管理器地址栏输入 `powershell` 并回车。不要覆盖 V1.1 或旧数据目录。
@@ -24,9 +38,9 @@ if ($LASTEXITCODE -ne 0) { throw '工具安装失败，请停止。' }
 & $P1SinaPython -m goose_research.probe_sina
 ```
 
-真实解码器专项应为6项通过；如果跳过或失败，请保留结果，不把它当成功。未安装可选工具时，普通完整测试会跳过其中5项。更详细的隔离安装解释见下文第二部分。不删除或修改旧工具、V1.1环境或私人数据。
+真实解码器专项应为7项通过；如果跳过或失败，请保留结果，不把它当成功。未安装可选工具时，普通完整测试会跳过其中6项。更详细的隔离安装解释见下文第二部分。不删除或修改旧工具、V1.1环境或私人数据。
 
-探测成功时会显示 `KLC_K2_sh515450 / 3466 / 版本0`（或支持的旧KL格式）、真实响应字节数、原始/选定条数与日期、首末日开高低收、采集时间和SHA256。**17915是字节数，不是日线条数**；仅HTTP200或出现K2变量名不能算成功。失败继续显示 `unavailable`，不启用备用源。可回传这些公开摘要，不需要持仓或私人路径。
+探测成功时会显示 `KLC_K2_sh515450 / 3466 / 版本0`（或支持的旧KL格式）、真实响应字节数、原始/选定条数与日期、首末日开高低收、采集时间和SHA256。**17915是响应长度观测，不是日线条数**；字符数与UTF8字节数可能不同。仅HTTP200或出现K2变量名不能算成功。失败继续显示 `unavailable`，不启用备用源。可回传这些公开摘要，不需要持仓或私人路径。
 
 编码区别、真实解码器实验和ZIP修复证据见 [K2修复说明](../docs/P1-SINA-K2.md)。
 

@@ -1,5 +1,7 @@
 # P1 新浪 K2 日线探测与 ZIP 回归修复
 
+本文件保留K2/运行库首轮修复记录；后续真实响应含尾部注释的问题及最新验证见 [P1-SINA-TRAILER.md](P1-SINA-TRAILER.md)。
+
 本轮只增量更新原 Draft PR #3 的 P1、专属CI及相关文档。未合并、未部署；不访问持仓、不覆盖快照，不改 V1.1、V2、原依赖锁、SQLite、定时任务或 Bark。
 
 ## K2 与 KL 的区别及 AKShare 兼容性

@@ -52,6 +52,44 @@ def fake_worker(decoded=None, response=None, begin='2025-01-03', end='2025-01-06
 
 
 class SinaCandidateTests(unittest.TestCase):
+    def test_single_complete_trailing_comment_preserves_body_hash_and_payload(self):
+        for wrapper, payload in [('KLC_KL_sh515450', 'HX/FICTIONAL'), ('KLC_K2_sh515450', 'K2/3rPXFICTIONAL')]:
+            base = ('var ' + wrapper + '="' + payload + '";').encode()
+            for tail in (b'\r\n/**/\r\n', b'\n/* cache: source=public; https://example.invalid/a */\n',
+                         '\n/* 新浪公开日线：测试注释。 */\n'.encode()):
+                body = base + tail
+                with self.subTest(wrapper=wrapper, tail=tail):
+                    downloaded = sina._download(lambda *_a, **_k: Response(body=body, length=len(body)))
+                    self.assertEqual(downloaded.text.encode(), body)
+                    self.assertEqual(downloaded.compressed, payload)
+                    self.assertEqual(downloaded.response_sha256, hashlib.sha256(body).hexdigest())
+                    self.assertEqual(downloaded.encoding['response_bytes'], len(body))
+
+    def test_truncated_nested_executable_or_abnormal_trailers_fail_before_decode(self):
+        base = b'var KLC_K2_sh515450="K2/3rPXFICTIONAL";'
+        tails = [b'/*', b'/* no closing delimiter', b'/* x * /', b'*/', b'/* outer /* inner */',
+                 b'/* a */ /* b */', b'/* ok */alert(1)', b'/* ok */;var x=1;',
+                 b'/* "*/alert(1)// */', b'// not a block comment', b'/*ok*/\x00', b'/*\x00*/', b'/*\x1b*/',
+                 '/*\u202e*/'.encode(), '/*\u200b*/'.encode(), '/*\u2028*/'.encode(),
+                 b'/*ok*/' + '\u00a0'.encode(), b'/*' + b'x' * 4096 + b'*/', b' ' * 4097,
+                 b'/* ok */var KLC_K2_sh515450="K2/AAAA";']
+        for tail in tails:
+            with self.subTest(tail=tail[:80]), self.assertRaises(sina.SinaResponseError):
+                sina._fetch_worker('515450.SH', '2025-01-02', '2025-01-06',
+                    opener=lambda *_a, **_k: Response(body=base + tail),
+                    decoder=lambda _s: self.fail('invalid trailer must fail before decoder'))
+
+    def test_trailer_length_boundary_and_placement_are_checked(self):
+        base = b'var KLC_K2_sh515450="K2/3rPXFICTIONAL";'
+        tail = b'/*' + b'x' * (4096 - 4) + b'*/'
+        downloaded = sina._download(lambda *_a, **_k: Response(body=base + tail))
+        self.assertTrue(downloaded.text.endswith(tail.decode()))
+        for body in [b'/* comment */' + base, base[:-1] + b'/* comment */',
+                     base.replace(b'sh515450', b'sh600900') + b'/* comment */',
+                     base.replace(b'K2/', b'K2+') + b'/* comment */']:
+            with self.subTest(body=body), self.assertRaises(sina.SinaError):
+                sina._download(lambda *_a, **_k: Response(body=body))
+
     def test_both_known_wrappers_bind_the_exact_symbol_and_encoding_header(self):
         for wrapper, payload, codec in [('KLC_KL_sh515450', 'HX/FICTIONAL', 1479),
                                         ('KLC_K2_sh515450', 'K2/3rPXFICTIONAL', 3466)]:
