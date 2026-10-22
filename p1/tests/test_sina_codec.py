@@ -1,6 +1,6 @@
 """Real pinned decoder/API, synthetic encoded bars, NO network or live claims.
 
-These two bitstreams were constructed from the 1.19.1 decoder's grammar, NOT
+These bitstreams were constructed from the 1.19.1 decoder's grammar, NOT
 downloaded from Sina. They encode the same three deliberately fictional bars.
 1479: precision=3, initial date, OHLC/volume delta widths=12 bits.
 3466: default price precision=6 (P() => /100), explicit initial date,
@@ -20,6 +20,9 @@ from goose_research import probe_sina as probe, sina
 FIXTURES = (
     ('KLC_KL_sh515450', 1479, 'HX/DRCDAg/kMRkBkByAkBAAAkBkByAKAAAAkBkByA2/'),
     ('KLC_K2_sh515450', 3466, 'K2/HCMRCDcjCUQBIDAAAAAFogCoAAAAAAKQBFw+/AAYA'),
+    # Same OHLCV, first-row-only prevclose=1.0. Original pandas API creates
+    # NaN in later optional prevclose cells; required OHLCV stays complete.
+    ('KLC_K2_sh515450', 3466, 'K2/HCMRCDRGFoAFUAyAAAAAQBKoAKAAAAAgCUQBs/PAAG'),
 )
 EXPECTED = [
     dict(time='2025-01-02', open='1.1', high='1.2', low='1', close='1.15', volume='100'),

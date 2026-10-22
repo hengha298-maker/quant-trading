@@ -106,6 +106,14 @@ class SinaProbeTests(unittest.TestCase):
             with self.subTest(mutate=mutate), patch.object(probe, '_original_api', return_value=api_parts), patch.object(sina, '_optional_runtime', return_value=runtime):
                 with self.assertRaises(probe.SinaApiMismatchError):
                     probe._verify_original_api(sina._download(lambda *_a, **_k: Response()), sina._normalise_rows(bars()))
+        # Dropping optional pandas columns must never admit missing/nonfinite
+        # core OHLCV or turn an unknown required value into zero.
+        for mutate in [lambda rows: rows[1].update(close=float('nan')),
+                       lambda rows: rows[1].update(volume=None), lambda rows: rows[1].pop('open')]:
+            api_parts, runtime = fake_api_runtime(mutate)
+            with self.subTest(core_mutation=mutate), patch.object(probe, '_original_api', return_value=api_parts), patch.object(sina, '_optional_runtime', return_value=runtime):
+                with self.assertRaises(sina.SinaError):
+                    probe._verify_original_api(sina._download(lambda *_a, **_k: Response()), sina._normalise_rows(bars()))
 
     def test_original_api_cannot_fall_back_to_other_network_url(self):
         api_parts, runtime = fake_api_runtime(wrong_url=True)

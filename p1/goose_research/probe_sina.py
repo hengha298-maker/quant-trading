@@ -93,7 +93,12 @@ def _verify_original_api(downloaded, raw_rows):
         for row in records:
             if not isinstance(row, dict) or type(row.get('date')) is not date:
                 raise SinaApiMismatchError()
-            copied = dict(row)
+            fields(row, ('date', 'open', 'high', 'low', 'close', 'volume'), ('prevclose', 'amount', 'postVol', 'postAmt'))
+            # Raw optional fields were validated where actually present. Pandas
+            # fills absent optional keys (e.g. first-row-only prevclose) with
+            # NaN when building columns. Compare only the required OHLCV, not
+            # these synthetic missing values; never relax core numeric checks.
+            copied = {key: row[key] for key in ('open', 'high', 'low', 'close', 'volume')}
             copied['date'] = row['date'].isoformat()
             normalised.append(copied)
         api_rows = sina._normalise_rows(normalised)

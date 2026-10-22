@@ -133,6 +133,7 @@ class SinaCandidateTests(unittest.TestCase):
                      lambda data: data[0].update(date='2099-01-01'), lambda data: data[0].update(close=5),
                      lambda data: data[0].update(open=0), lambda data: data[0].update(volume=-1),
                      lambda data: data[0].update(volume=float('nan')), lambda data: data[0].update(high=float('inf')),
+                     lambda data: data[0].update(prevclose=float('nan')), lambda data: data[0].update(volume=None),
                      lambda data: data[0].update(volume=True), lambda data: data[0].update(secret='ignored?'),
                      lambda data: data[0].update(date='2025-01-02T01:00:00.000Z')]
         for mutate in mutations:
