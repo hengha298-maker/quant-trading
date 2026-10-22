@@ -106,12 +106,13 @@ def timestamp(value, interval):
 def validate_market(doc):
     fields(doc, ('schema_version', 'symbol', 'interval', 'source', 'adjustment', 'fetched_at',
                  'requested_start', 'requested_end', 'status', 'rows'),
-           ('url', 'audit', 'audit_detail', 'error_type', 'count', 'observed_start', 'observed_end', 'stale'))
+           ('url', 'audit', 'audit_detail', 'error_type', 'count', 'observed_start', 'observed_end', 'stale',
+            'provider_attempts', 'freshness', 'provenance'))
     version(doc)
     symbol(doc['symbol'])
     require(doc['interval'] in ('daily', 'minute') and doc['status'] in ('observed', 'unavailable'))
     text(doc['source'])
-    require(doc['adjustment'] == '不复权')
+    require(doc['adjustment'] in ('不复权', '源站原始价格（复权口径未核验）'))
     begin, end = day(doc['requested_start']), day(doc['requested_end'])
     require(begin <= end, '请求日期范围无效')
     try:
@@ -125,8 +126,34 @@ def validate_market(doc):
             text(doc[key], 4096)
     rows = doc['rows']
     require(isinstance(rows, list) and len(rows) <= 100000)
+    if 'provider_attempts' in doc:
+        attempts = doc['provider_attempts']
+        require(isinstance(attempts, list) and 1 <= len(attempts) <= 2)
+        seen = set()
+        for attempt in attempts:
+            fields(attempt, ('provider', 'status'), ('error_type',))
+            require(attempt['provider'] in ('eastmoney', 'sina') and attempt['provider'] not in seen)
+            seen.add(attempt['provider'])
+            require(attempt['status'] in ('observed', 'unavailable', 'skipped'))
+            if attempt['status'] == 'observed':
+                require('error_type' not in attempt)
+            else:
+                require(isinstance(attempt.get('error_type'), str) and
+                        re.fullmatch(r'[A-Za-z][A-Za-z0-9_]{0,63}', attempt['error_type']))
+            if attempt['provider'] == 'sina':
+                require(doc['symbol'] == '515450.SH' and doc['interval'] == 'daily')
+            if attempt['status'] == 'skipped':
+                require(attempt['provider'] == 'sina' and attempt['error_type'] == 'SourceNotVerified')
+        require(len(attempts) == 1 or [a['provider'] for a in attempts] == ['eastmoney', 'sina'])
+        require((attempts[-1]['status'] == 'observed') == (doc['status'] == 'observed'))
+        require(not any(a['status'] == 'observed' for a in attempts[:-1]))
+        if doc['status'] == 'observed' and attempts[-1]['provider'] == 'sina':
+            require('provenance' in doc, '备用来源必须保留来源与复权审计')
+    if doc['source'] == '新浪公开日线（AKShare 固定解码器）' and doc['status'] == 'observed':
+        require('provenance' in doc, '备用来源必须保留来源与复权审计')
     if doc['status'] == 'unavailable':
-        require(not rows and not any(k in doc for k in ('observed_start', 'observed_end', 'stale', 'audit_detail')))
+        require(not rows and not any(k in doc for k in ('observed_start', 'observed_end', 'stale', 'audit_detail', 'freshness', 'provenance')))
+        require(doc['adjustment'] == '不复权')
         require('count' not in doc or type(doc['count']) is int and doc['count'] == 0)
         return doc
     require(bool(rows) and 'error_type' not in doc, '有效行情必须有数据且不能携带失败状态')
@@ -143,6 +170,46 @@ def validate_market(doc):
     require(type(doc.get('count')) is int and doc['count'] == len(rows), '行情条数不一致')
     require(doc.get('observed_start') == rows[0]['time'] and doc.get('observed_end') == rows[-1]['time'], '实际行情范围不一致')
     require(type(doc.get('stale')) is bool and doc['stale'] == (previous.date() != fetched.astimezone(BJ).date()), '行情滞后标记不一致')
+    if 'freshness' in doc:
+        fresh = doc['freshness']
+        fields(fresh, ('expected_last_date', 'latest_date', 'checked_at', 'basis', 'calendar_verified', 'state'))
+        require(doc['interval'] == 'daily' and fresh['calendar_verified'] is False)
+        require(fresh['state'] == 'meets_date_requirement' and fresh['checked_at'] == doc['fetched_at'])
+        require(fresh['basis'] in ('user_confirmed_date_not_calendar_verification', 'conservative_weekday_not_exchange_calendar'))
+        require(begin <= day(fresh['expected_last_date']) <= day(fresh['latest_date']) <= end)
+        require(fresh['latest_date'] == rows[-1]['time'])
+        if fresh['basis'] == 'conservative_weekday_not_exchange_calendar':
+            local = fetched.astimezone(BJ)
+            candidate = local.date() - timedelta(days=1 if local.hour < 16 else 0)
+            while candidate.weekday() >= 5:
+                candidate -= timedelta(days=1)
+            require(fresh['expected_last_date'] == str(candidate), '日线时效要求与采集时点不一致')
+        elif day(fresh['expected_last_date']) == fetched.astimezone(BJ).date():
+            require(fetched.astimezone(BJ).hour >= 16, '不接受尚未结束的当日日线')
+    if 'provenance' in doc:
+        provenance = doc['provenance']
+        fields(provenance, ('provider', 'symbol', 'response_sha256', 'decoder', 'raw_start', 'raw_end',
+                            'raw_count', 'volume_unit', 'adjustment_verified', 'raw_order_verified'))
+        require(provenance['provider'] == 'sina' and provenance['symbol'] == 'sh515450')
+        require(doc['symbol'] == '515450.SH' and doc['interval'] == 'daily' and
+                doc['source'] == '新浪公开日线（AKShare 固定解码器）')
+        require(doc.get('url') == 'https://finance.sina.com.cn/realstock/company/sh515450/hisdata_klc2/klc_kl.js',
+                '备用来源地址与证券不一致')
+        require(doc['adjustment'] == '源站原始价格（复权口径未核验）')
+        require(provenance['adjustment_verified'] is False and provenance['raw_order_verified'] is True)
+        require(provenance['decoder'] == 'akshare-1.19.1')
+        require(isinstance(provenance['response_sha256'], str) and re.fullmatch(r'[0-9a-f]{64}', provenance['response_sha256']))
+        require(type(provenance['raw_count']) is int and len(rows) <= provenance['raw_count'] <= 100000)
+        raw_begin, raw_end = day(provenance['raw_start']), day(provenance['raw_end'])
+        require(raw_begin <= raw_end and provenance['raw_count'] <= (raw_end - raw_begin).days + 1)
+        require((provenance['raw_count'] == 1) == (raw_begin == raw_end))
+        require(day(provenance['raw_start']) <= date.fromisoformat(rows[0]['time']) and
+                date.fromisoformat(rows[-1]['time']) <= day(provenance['raw_end']) <= fetched.astimezone(BJ).date())
+        require(provenance['volume_unit'] == '源站原始值（AKShare文档称手，未核验）')
+        if 'provider_attempts' in doc:
+            require(doc['provider_attempts'][-1] == {'provider': 'sina', 'status': 'observed'})
+    if doc['adjustment'] != '不复权':
+        require('provenance' in doc, '未核验复权口径必须有独立来源审计')
     if 'audit_detail' in doc:
         audit = doc['audit_detail']
         fields(audit, ('calendar_verified', 'missing_weekday_candidates', 'note', 'last_observation_lag_days'))

@@ -1,5 +1,5 @@
 import csv
-from datetime import date
+from datetime import date, datetime, timezone, timedelta
 from decimal import Decimal
 import io
 import os
@@ -107,10 +107,11 @@ class ResearchTests(unittest.TestCase):
 
     def test_market_validation(self):
         line = '2026-01-05,10,11,12,9,100'
-        result = fetch('600900.SH', 'daily', self.feed([line]))
+        now = datetime(2026, 1, 5, 17, tzinfo=timezone(timedelta(hours=8)))
+        result = fetch('600900.SH', 'daily', self.feed([line]), now=now)
         self.assertEqual((result['status'], result['count']), ('observed', 1))
         for rows in ([], [line, line], ['2026-01-05,10,11,8,9,100'], ['2026-01-05,NaN,11,12,9,100'], ['2099-01-01,10,11,12,9,100']):
-            self.assertEqual(fetch('600900.SH', 'daily', self.feed(rows))['status'], 'unavailable')
+            self.assertEqual(fetch('600900.SH', 'daily', self.feed(rows), now=now)['status'], 'unavailable')
         self.assertEqual(three_years_ago(date(2024, 2, 29)), date(2021, 2, 28))
 
     def test_minutes_and_failure(self):
@@ -140,7 +141,8 @@ class ResearchTests(unittest.TestCase):
         self.write([row])
         doc = parse(self.csv)
         self.assertEqual(doc['accounts'][0]['positions'][0]['broker_cost'], '-2.5')
-        m = fetch('600900.SH', 'daily', self.feed(['2026-01-05,10,11,12,9,100']))
+        m = fetch('600900.SH', 'daily', self.feed(['2026-01-05,10,11,12,9,100']),
+                  now=datetime(2026, 1, 5, 17, tzinfo=timezone(timedelta(hours=8))))
         html = render(doc, [m])
         self.assertIn('先买后卖', html)
         self.assertIn('先卖后买', html)

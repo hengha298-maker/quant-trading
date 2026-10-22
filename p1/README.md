@@ -2,6 +2,12 @@
 
 此目录为独立只读研究台。**不要在宿舍电脑现有 V1.1 目录升级、安装或运行原 scripts。** 审核阶段只在另一测试目录检出本 Draft PR；不合并、不部署。
 
+## 515450 日线故障与新浪候选源（2026-10-22）
+
+东方财富接口保留。已增加独立的新浪日线候选适配器、回退路径及脱敏探测命令，但**尚未取得真实新浪响应，备用源保持未启用**：本轮环境的出口代理拒绝访问 `finance.sina.com.cn`（403）。不能把离线测试通过写成真实行情验证成功。当前主源失败时保存 `unavailable`，并明确记录新浪为 `skipped / SourceNotVerified`，不产生交易建议。
+
+Windows / 无 Git 的 ZIP 用户可直接按 [新浪核验新手指南](SINA-VERIFICATION.md) 执行。默认 P1 及离线测试仍只需 Python 标准库；仅独立新浪探测需要在源码和 V1.1 之外安装固定的可选依赖。详细改动、真实验证边界见 [ETF 备用源验证记录](../docs/P1-ETF-FALLBACK.md)。
+
 ## Windows Python 3.12
 
 使用单独代码副本，例如 `C:\GooseP1Code`，不要放进 V1.1 目录。Python 3.12 已安装时，无需 pip 安装任何包：
@@ -55,6 +61,8 @@ py -3.12 -m goose_research --data-dir "$P1Data" collect 600900.SH --interval min
 
 每次返回独立行情JSON路径。**collect退出0只代表采集记录已保存，不代表行情获取成功**：检查报告中的 status、error_type、实际范围；失败为 unavailable。网络不可用也可生成报告。
 
+日线新增 `--source auto|eastmoney|sina`，默认 `auto`；新浪只适用 `515450.SH` 日线且受真实验收门禁控制。日线默认要求北京时间16点前的上一工作日、16点后的当日（周末退回工作日），不接受未结束的当日日线。此规则不是交易所日历，节假日可能保守拒绝；仅在独立核对最后完整交易日后使用 `--expected-last-date YYYY-MM-DD`。新采集数据未达到要求截至日时整批不可用，不沿用早期成功记录。单批不跨来源拼接；未知复权的备用数据即使通过结构校验也不进入费用参考计算。
+
 ```powershell
 py -3.12 -m goose_research --data-dir "$P1Data" report '替换为快照完整路径' --market '替换为600900日线记录完整路径' --market '替换为515450日线记录完整路径'
 ```
@@ -81,7 +89,7 @@ git diff --cached --stat
 git diff --cached
 ```
 
-脚本检查暂存区或全部跟踪文件，拒绝CSV、JSON快照、HTML、数据库、Excel和备份；原V1两个配置示例例外。CI运行全部检查。勿用 git add -f，勿把真实数据贴到源码、测试、PR、截图或聊天。检查不保证识别所有秘密或改名数据，人工审阅仍必要。
+有 Git 时脚本检查暂存区或全部跟踪文件；ZIP 无 `.git` 或未安装 Git 时，改为明确标记的文件系统全量扫描，此时不需要执行上面的两条 `git diff`。两种模式都拒绝CSV、JSON快照、HTML、数据库、Excel和备份；原V1两个配置示例例外。ZIP 全量扫描不按 `.gitignore` 排除工具或虚拟环境，不能把私人数据、工具环境放进源码。CI运行全部检查。勿用 git add -f，勿把真实数据贴到源码、测试、PR、截图或聊天。检查不保证识别所有秘密或改名数据，人工审阅仍必要。
 
 停止P1进程后，把整个 `$P1Data` 复制到**另一个非同步、受访问控制的本地磁盘目录**（包含 .local-only、输入、snapshots、market、reports）；不要备份至仓库或云盘。可用 `Get-FileHash -Algorithm SHA256 文件路径` 对比原件与备份。不需要停止或修改V1任务，因为P1不访问V1。
 

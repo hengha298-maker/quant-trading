@@ -1,0 +1,3 @@
+# Optional isolated research/probe environment only; never install into V1.
+akshare==1.19.1
+py-mini-racer==0.6.0
