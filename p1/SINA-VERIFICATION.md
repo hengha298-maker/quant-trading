@@ -2,6 +2,18 @@
 
 这份指南只用于独立测试公开行情，不需要券商账号、持仓文件、Bark 密钥或其他凭证。原有 V1.1 定时任务、SQLite 数据库、Bark 配置和已安装环境保持不动。P1 的一般用法见 [README.md](README.md)。
 
+## 已下载成功却仍不可用：一条命令输出脱敏诊断
+
+重新下载[原PR分支ZIP](https://github.com/hengha298-maker/quant-trading/archive/refs/heads/codex/goose-v2-p1-readonly.zip)，解压到新目录，进入 `p1` 并在地址栏输入 `powershell`。复用现有K2环境，无需重装工具或Git：
+
+```powershell
+& (Join-Path $env:LOCALAPPDATA 'GooseP1SinaTools-K2-1.19.1\Scripts\python.exe') -m goose_research.diagnose_sina
+```
+
+只输出一份脱敏JSON，不输出常规行情摘要或完整异常，不保存诊断文件。可直接回传这份JSON。先看`failed_stage`和`failed_check`，再看`stages`中的长度/布尔值；`code`给出实际加载的源码/执行函数指纹和长度上限，`worker_matches_parent`核对父子进程是否使用同版代码。未执行的阶段列在`not_reached`，不能当作通过。
+
+退出0仅表示本次核验通过，退出1为不可用；探测不读持仓、不保存行情、不改变门禁。失败后不要为了通过而修改正则、长度上限或截至日。版本/阶段字段解释及旧第126行的核对证据见 [阶段诊断说明](../docs/P1-SINA-DIAGNOSTICS.md)。
+
 ## 尾部注释修复：已安装K2工具时的最短复验
 
 重新下载[原PR分支ZIP](https://github.com/hengha298-maker/quant-trading/archive/refs/heads/codex/goose-v2-p1-readonly.zip)，解压到新目录，进入 `p1`，在资源管理器地址栏输入 `powershell`。复用已有K2工具，无需重装依赖、激活环境或安装Git：
@@ -12,7 +24,7 @@ $P1SinaPython = Join-Path $env:LOCALAPPDATA 'GooseP1SinaTools-K2-1.19.1\Scripts\
 & $P1SinaPython -m goose_research.probe_sina
 ```
 
-专项应为31项通过，包括合法/截断/恶意尾部、真实K2解码器和原API比较；跳过不能算通过。如果第二行失败，请先停下并保留结果。最后一行只做真实公开行情探测，不读取持仓、不保存数据、不启用备用源。回传探测的公开摘要和退出码即可，不需要私人文件。
+专项应为44项通过，包括阶段诊断、合法/截断/恶意尾部、真实K2解码器和原API比较；跳过不能算通过。如果第二行失败，请先停下并保留结果。最后一行只做真实公开行情探测，不读取持仓、不保存数据、不启用备用源。定位失败优先使用上面的一条诊断命令，不必重复输出行情摘要或完整异常。
 
 本次只兼容一个经严格验证的完整尾部块注释，规则及真实数据核验边界见 [尾部注释修复记录](../docs/P1-SINA-TRAILER.md)。
 

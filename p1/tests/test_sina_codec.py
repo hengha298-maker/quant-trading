@@ -15,6 +15,7 @@ import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from goose_research import probe_sina as probe, sina
+from goose_research.diagnose_sina import Trace
 
 # FICTIONAL UNIT-TEST FIXTURES. Never use them as observations or fallback data.
 FIXTURES = (
@@ -65,8 +66,9 @@ class PinnedDecoderTests(unittest.TestCase):
         for wrapper, _codec, payload in FIXTURES[1:]:
             response = Response(wrapper, payload, '\n/* 新浪日线；source=public; cache note */\n'.encode())
             with self.subTest(payload=payload):
+                trace = Trace()
                 result = probe._probe_worker('2025-01-03', '2025-01-06', probe.BASES[0],
-                    opener=lambda *_a, **_k: response, now=NOW)
+                    opener=lambda *_a, **_k: response, now=NOW, diagnostic=trace)
                 self.assertEqual((result['raw_start'], result['raw_end'], result['raw_count']),
                                  ('2025-01-02', '2025-01-06', 3))
                 self.assertEqual(result['selected_count'], 2)
@@ -76,6 +78,8 @@ class PinnedDecoderTests(unittest.TestCase):
                 self.assertEqual(result['encoding']['response_bytes'], len(response.body))
                 self.assertTrue(result['api_rows_match'])
                 self.assertFalse(result['gate_changed'])
+                self.assertTrue(all(s['state'] == 'passed' for s in trace.items))
+                self.assertEqual([s['stage'] for s in trace.items][-3:], ['decode', 'api', 'freshness'])
                 probe._validate_summary(result, '2025-01-03', '2025-01-06', probe.BASES[0])
                 with self.assertRaises(probe.SinaStaleDataError):
                     probe._probe_worker('2025-01-03', '2025-01-07', probe.BASES[0],

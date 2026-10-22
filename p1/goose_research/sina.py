@@ -25,6 +25,7 @@ from .validation import SINA_CODECS, day, fields, number, timestamp, validate_si
 
 URL = 'https://finance.sina.com.cn/realstock/company/sh515450/hisdata_klc2/klc_kl.js'
 AKSHARE_VERSION = '1.19.1'
+IMPLEMENTATION = 'sina-stages-v1'
 MAX_BYTES = 8_000_000
 MAX_TRAILER_CHARS = 4096
 MAX_ROWS = 100_000
@@ -96,60 +97,111 @@ def _bounds(symbol, begin, end):
     return begin, end
 
 
-def _validate_trailer(tail):
+def _note(diagnostic, stage, check, **metrics):
+    if diagnostic is not None:
+        diagnostic.begin(stage, check, **metrics)
+
+
+def _passed(diagnostic, stage):
+    if diagnostic is not None:
+        diagnostic.passed(stage)
+
+
+def _validate_trailer(tail, *, diagnostic=None):
     """Only whitespace or ONE bounded, complete, non-nested block comment.
 
     Validate the whole suffix; never remove comments globally or accept a
     prefix while ignoring what follows it. Comment text is inert: the raw body
     is retained for API comparison, and is never evaluated as JavaScript.
     """
+    _note(diagnostic, 'trailer', 'limit', trailer_chars=min(len(tail), MAX_BYTES + 1))
     if len(tail) > MAX_TRAILER_CHARS:
         raise SinaResponseError()
     tail = tail.strip(' \t\r\n')
     if not tail:
+        _note(diagnostic, 'trailer', 'absent', comment_present=False)
+        _passed(diagnostic, 'trailer')
         return
-    if not tail.startswith('/*') or tail.find('*/', 2) != len(tail) - 2:
+    boundary_ok = tail.startswith('/*') and tail.find('*/', 2) == len(tail) - 2
+    _note(diagnostic, 'trailer', 'boundary', comment_present=tail.startswith('/*'), boundary_complete=boundary_ok)
+    if not boundary_ok:
         raise SinaResponseError()
     content = tail[2:-2]
-    if '/*' in content or any(not (c in '\t\r\n' or c.isprintable()) for c in content):
+    nested = '/*' in content
+    printable = all(c in '\t\r\n' or c.isprintable() for c in content)
+    _note(diagnostic, 'trailer', 'content', nested_comment=nested, content_printable=printable)
+    if nested or not printable:
         raise SinaResponseError()
+    _passed(diagnostic, 'trailer')
 
 
-def _download(opener=None):
+def _download(opener=None, *, diagnostic=None):
     opener = opener or build_opener(_NoRedirect()).open
     request = Request(URL, headers={'User-Agent': 'GooseResearch-P1-candidate/1.0'})
     try:
+        _note(diagnostic, 'http', 'open')
         with opener(request, timeout=DOWNLOAD_TIMEOUT) as response:
-            if response.geturl() != URL or response.status != 200:
+            url_matches = response.geturl() == URL
+            status = response.status
+            _note(diagnostic, 'http', 'identity', url_matches=url_matches,
+                  http_status=status if type(status) is int and 100 <= status <= 599 else None)
+            if not url_matches or status != 200:
                 raise SinaResponseError()
+            _passed(diagnostic, 'http')
+            _note(diagnostic, 'length', 'header_read')
             length = response.headers.get('Content-Length')
-            if length is not None and (not re.fullmatch(r'[0-9]+', length) or int(length) > MAX_BYTES):
+            is_text = isinstance(length, str)
+            ascii_digits = is_text and re.fullmatch(r'[0-9]+', length) is not None
+            _note(diagnostic, 'length', 'header_format', header_present=length is not None,
+                  header_is_text=is_text, header_ascii_digits=ascii_digits,
+                  header_char_count=min(len(length), MAX_BYTES + 1) if is_text else None,
+                  header_non_digit_count=min(sum(c not in '0123456789' for c in length), MAX_BYTES + 1) if is_text else None)
+            if length is not None and not ascii_digits:
                 raise SinaResponseError()
+            _note(diagnostic, 'length', 'header_parse')
+            declared = None if length is None else int(length)
+            _note(diagnostic, 'length', 'declared_limit',
+                  declared_bytes=declared if declared is not None and declared <= MAX_BYTES else None,
+                  declared_exceeds_limit=declared is not None and declared > MAX_BYTES)
+            if declared is not None and declared > MAX_BYTES:
+                raise SinaResponseError()
+            _note(diagnostic, 'length', 'read')
             raw = response.read(MAX_BYTES + 1)
+            _note(diagnostic, 'length', 'body_limit', body_is_bytes=isinstance(raw, bytes),
+                  received_bytes=min(len(raw), MAX_BYTES + 1) if isinstance(raw, bytes) else None)
             if not isinstance(raw, bytes) or not raw or len(raw) > MAX_BYTES:
                 raise SinaResponseError()
-            if length is not None and int(length) != len(raw):
+            _note(diagnostic, 'length', 'exact_match',
+                  length_matches=None if declared is None else declared == len(raw))
+            if declared is not None and declared != len(raw):
                 raise SinaResponseError()
+            _passed(diagnostic, 'length')
     except SinaError:
         raise
     except TimeoutError:
         raise SinaTimeoutError() from None
     except (HTTPError, URLError, OSError, ValueError, TypeError):
         raise SinaResponseError() from None
+    _note(diagnostic, 'wrapper', 'utf8')
     try:
         body = raw.decode('utf-8-sig')
     except UnicodeError:
         raise SinaResponseError() from None
     # Anchor the complete assignment, then validate EVERY remaining character.
     # Sina may append a block comment after the semicolon; it is not JS input.
+    _note(diagnostic, 'wrapper', 'assignment')
     match = re.match(r'\s*var\s+(KLC_K(?:L|2)_sh515450)\s*=\s*"([A-Za-z0-9+/]+)"\s*;', body)
     if match is None:
         raise SinaResponseError()
-    _validate_trailer(body[match.end():])
+    _passed(diagnostic, 'wrapper')
+    _validate_trailer(body[match.end():], diagnostic=diagnostic)
     wrapper, compressed = match.groups()
+    _note(diagnostic, 'encoding', 'header')
     codec, version = _encoding_header(compressed)
+    _note(diagnostic, 'encoding', 'wrapper_match', codec=codec, codec_version=version)
     if (codec, version) != SINA_CODECS[wrapper]:
         raise SinaEncodingError()
+    _passed(diagnostic, 'encoding')
     encoding = dict(wrapper=wrapper, codec=codec, version=version, response_bytes=len(raw))
     return Download(compressed, body, hashlib.sha256(raw).hexdigest(), encoding)
 
@@ -186,14 +238,18 @@ def _optional_runtime():
         raise SinaDependencyError() from None
 
 
-def _decode_payload(payload, runtime_loader=None):
+def _decode_payload(payload, runtime_loader=None, *, diagnostic=None):
+    _note(diagnostic, 'decode', 'dependencies')
     script, factory = (runtime_loader or _optional_runtime)()
+    _note(diagnostic, 'decode', 'engine')
     try:
         engine = factory()
     except Exception:
         raise SinaDependencyError() from None
     try:
+        _note(diagnostic, 'decode', 'static_decoder')
         engine.eval(script, timeout=JS_TIMEOUT_MS, max_memory=JS_MEMORY_BYTES)
+        _note(diagnostic, 'decode', 'payload')
         return engine.call('d', payload, timeout=JS_TIMEOUT_MS, max_memory=JS_MEMORY_BYTES)
     except Exception as exc:
         if type(exc).__name__ in ('JSTimeoutException', 'JSTimeout'):

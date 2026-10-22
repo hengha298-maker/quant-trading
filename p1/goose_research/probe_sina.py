@@ -120,19 +120,31 @@ def _verify_original_api(downloaded, raw_rows):
     return True
 
 
-def _probe_worker(begin, expected, basis, *, opener=None, decoder=None, verifier=None, now=None):
+def _probe_worker(begin, expected, basis, *, opener=None, decoder=None, verifier=None, now=None, diagnostic=None):
+    sina._note(diagnostic, 'input', 'dates')
     begin, expected = sina._bounds('515450.SH', begin, expected)
     if basis not in BASES:
         raise sina.SinaResponseError()
-    downloaded = sina._download(opener)
-    raw_rows = sina._normalise_rows((decoder or sina._decode_payload)(downloaded.compressed))
+    sina._passed(diagnostic, 'input')
+    downloaded = sina._download(opener, diagnostic=diagnostic)
+    sina._note(diagnostic, 'decode', 'payload')
+    decoded = decoder(downloaded.compressed) if decoder else sina._decode_payload(downloaded.compressed, diagnostic=diagnostic)
+    sina._note(diagnostic, 'decode', 'rows')
+    raw_rows = sina._normalise_rows(decoded)
+    sina._note(diagnostic, 'decode', 'rows', raw_count=len(raw_rows))
+    sina._passed(diagnostic, 'decode')
     # The original unmodified sequence is validated before the API is allowed to
     # sort it. The API must then agree with every validated original row.
+    sina._note(diagnostic, 'api', 'compare')
     if (verifier or _verify_original_api)(downloaded, raw_rows) is not True:
         raise SinaApiMismatchError()
+    sina._passed(diagnostic, 'api')
     selected = [row for row in raw_rows if begin <= row['time'] <= expected]
+    sina._note(diagnostic, 'freshness', 'last_date', expected_date=expected,
+               latest_date=selected[-1]['time'] if selected else None, selected_count=len(selected))
     if not selected or selected[-1]['time'] != expected:
         raise SinaStaleDataError()
+    sina._passed(diagnostic, 'freshness')
     return dict(status='observed', symbol='515450.SH', api_checked=API, api_rows_match=True,
                 response_sha256=downloaded.response_sha256, encoding=downloaded.encoding,
                 first_bar=selected[0], last_bar=selected[-1], raw_start=raw_rows[0]['time'], raw_end=raw_rows[-1]['time'],
