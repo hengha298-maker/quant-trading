@@ -132,10 +132,26 @@ def _download(opener=None):
     return Download(compressed, body, hashlib.sha256(raw).hexdigest(), encoding)
 
 
+def _check_runtime_dependencies():
+    # AKShare 1.19.1 itself selects different distributions by platform. Both
+    # install the py_mini_racer namespace, so a mixed installation is unsafe.
+    required, version, conflicting = (('py-mini-racer', '0.6.0', 'mini-racer') if sys.platform == 'linux'
+                                      else ('mini-racer', '0.14.1', 'py-mini-racer'))
+    try:
+        if metadata.version('akshare') != AKSHARE_VERSION or metadata.version(required) != version:
+            raise SinaDependencyError()
+        try:
+            metadata.version(conflicting)
+        except metadata.PackageNotFoundError:
+            return
+        raise SinaDependencyError()
+    except metadata.PackageNotFoundError:
+        raise SinaDependencyError() from None
+
+
 def _optional_runtime():
     try:
-        if metadata.version('akshare') != AKSHARE_VERSION:
-            raise SinaDependencyError()
+        _check_runtime_dependencies()
         constants = importlib.import_module('akshare.stock.cons')
         runtime = importlib.import_module('py_mini_racer')
         script = constants.hk_js_decode
@@ -152,12 +168,19 @@ def _decode_payload(payload, runtime_loader=None):
     script, factory = (runtime_loader or _optional_runtime)()
     try:
         engine = factory()
+    except Exception:
+        raise SinaDependencyError() from None
+    try:
         engine.eval(script, timeout=JS_TIMEOUT_MS, max_memory=JS_MEMORY_BYTES)
         return engine.call('d', payload, timeout=JS_TIMEOUT_MS, max_memory=JS_MEMORY_BYTES)
     except Exception as exc:
         if type(exc).__name__ in ('JSTimeoutException', 'JSTimeout'):
             raise SinaTimeoutError() from None
         raise SinaDecodeError() from None
+    finally:
+        close = getattr(engine, 'close', None)
+        if callable(close):
+            close()
 
 
 def _normalise_rows(decoded):

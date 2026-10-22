@@ -77,7 +77,12 @@ def _verify_original_api(downloaded, raw_rows):
             if function != 'd' or args != (compressed,) or kwargs or calls['call']:
                 raise sina.SinaDecodeError()
             calls['call'] += 1
-            return self.engine.call('d', compressed, timeout=sina.JS_TIMEOUT_MS, max_memory=sina.JS_MEMORY_BYTES)
+            try:
+                return self.engine.call('d', compressed, timeout=sina.JS_TIMEOUT_MS, max_memory=sina.JS_MEMORY_BYTES)
+            finally:
+                close = getattr(self.engine, 'close', None)
+                if callable(close):
+                    close()
 
     try:
         # No global transport change survives the isolated worker. There is no

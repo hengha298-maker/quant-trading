@@ -12,15 +12,19 @@
 py -3.12 -m unittest discover -s tests -v
 ```
 
-此前已按本指南安装新浪工具时，复制下面三行：
+K2修复版使用**新的独立工具目录**，避免旧工具中两个运行库互相覆盖。仍在同一个 `p1` 窗口，复制以下命令：
 
 ```powershell
-$P1SinaPython = Join-Path $env:LOCALAPPDATA 'GooseP1SinaTools-1.19.1\Scripts\python.exe'
+$P1SinaEnv = Join-Path $env:LOCALAPPDATA 'GooseP1SinaTools-K2-1.19.1'
+$P1SinaPython = Join-Path $P1SinaEnv 'Scripts\python.exe'
+if (-not (Test-Path $P1SinaPython)) { py -3.12 -m venv "$P1SinaEnv" }
+& $P1SinaPython -m pip install -r .\requirements-sina.txt
+if ($LASTEXITCODE -ne 0) { throw '工具安装失败，请停止。' }
 & $P1SinaPython -m unittest discover -s tests -p test_sina_codec.py -v
 & $P1SinaPython -m goose_research.probe_sina
 ```
 
-如果找不到这个解释器，先完成下文“二、安装独立的新浪探测工具”。真实解码器专项应为6项通过；未安装可选工具时，普通完整测试会跳过其中5项，不能算作解码验证通过。
+真实解码器专项应为6项通过；如果跳过或失败，请保留结果，不把它当成功。未安装可选工具时，普通完整测试会跳过其中5项。更详细的隔离安装解释见下文第二部分。不删除或修改旧工具、V1.1环境或私人数据。
 
 探测成功时会显示 `KLC_K2_sh515450 / 3466 / 版本0`（或支持的旧KL格式）、真实响应字节数、原始/选定条数与日期、首末日开高低收、采集时间和SHA256。**17915是字节数，不是日线条数**；仅HTTP200或出现K2变量名不能算成功。失败继续显示 `unavailable`，不启用备用源。可回传这些公开摘要，不需要持仓或私人路径。
 
@@ -62,7 +66,7 @@ ZIP 没有 `.git` 时，隐私检查会明确显示“文件系统全量扫描�
 仍在上面的 `p1` 文件夹中，复制执行：
 
 ```powershell
-$P1SinaEnv = Join-Path $env:LOCALAPPDATA 'GooseP1SinaTools-1.19.1'
+$P1SinaEnv = Join-Path $env:LOCALAPPDATA 'GooseP1SinaTools-K2-1.19.1'
 $P1SinaPython = Join-Path $P1SinaEnv 'Scripts\python.exe'
 if (-not (Test-Path -LiteralPath $P1SinaPython -PathType Leaf)) {
     py -3.12 -m venv "$P1SinaEnv"
@@ -72,7 +76,9 @@ if (-not (Test-Path -LiteralPath $P1SinaPython -PathType Leaf)) {
 if ($LASTEXITCODE -ne 0) { throw '独立工具依赖安装失败，请停止，不要在 V1.1 或源码目录中重装。' }
 ```
 
-已有这个工具环境时会复用它，不删除目录。依赖文件固定本轮直接依赖 `akshare==1.19.1` 和 `py-mini-racer==0.6.0`，并会安装它们需要的间接依赖。所有安装都通过 `$P1SinaPython` 执行，不向 V1.1 的 Python 安装包。包下载需要访问软件包服务；包安装成功不代表新浪域名已经可访问。
+已有这个**K2专用**工具环境时会复用它，不删除目录。不要复用旧的 `GooseP1SinaTools-1.19.1`：AKShare1.19.1在Windows依赖新版 `mini-racer`，同时安装旧 `py-mini-racer` 会覆盖同名模块。新版依赖文件固定AKShare1.19.1，Windows使用 `mini-racer==0.14.1`，Linux使用 `py-mini-racer==0.6.0`，只选一种。检测到混装时明确拒绝为 `SinaDependencyError`，不能通过跳过专项就宣称成功。
+
+所有安装都通过 `$P1SinaPython` 执行，会安装相应间接依赖，不向 V1.1 的 Python 安装包。包下载需要访问软件包服务；包安装成功不代表新浪域名已经可访问。
 
 如果重新打开 PowerShell，只需重新执行前两行变量赋值，再运行下面的探测命令；不需要每次重新安装。
 

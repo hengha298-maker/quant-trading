@@ -46,8 +46,9 @@ class Response:
 
 def installed():
     try:
-        return metadata.version('akshare') == '1.19.1' and metadata.version('py-mini-racer') == '0.6.0'
-    except metadata.PackageNotFoundError:
+        sina._check_runtime_dependencies()
+        return True
+    except sina.SinaDependencyError:
         return False
 
 
@@ -58,7 +59,7 @@ class HeaderTests(unittest.TestCase):
         self.assertEqual(sina._encoding_header('K2+3rPX'), (3466, 1))
 
 
-@unittest.skipUnless(installed(), 'optional pinned Sina tools absent; full dependency CI executes real decoder/API')
+@unittest.skipUnless(installed(), 'requires clean pinned Sina tools; absent/mismatched/conflicting runtimes; isolated P1 tools CI executes real decoder/API')
 class PinnedDecoderTests(unittest.TestCase):
     def test_real_pinned_decoder_executes_both_families_with_known_prices_and_dates(self):
         for wrapper, codec, payload in FIXTURES:

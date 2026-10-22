@@ -198,6 +198,18 @@ class SinaCandidateTests(unittest.TestCase):
         with patch.object(sina.metadata, 'version', return_value='999'):
             with self.assertRaises(sina.SinaDependencyError):
                 sina._optional_runtime()
+        for platform, required, version, conflicting in [('linux', 'py-mini-racer', '0.6.0', 'mini-racer'),
+                                                         ('win32', 'mini-racer', '0.14.1', 'py-mini-racer')]:
+            versions = {'akshare': '1.19.1', required: version}
+            def lookup(name):
+                if name not in versions:
+                    raise metadata.PackageNotFoundError(name)
+                return versions[name]
+            with self.subTest(platform=platform), patch.object(sina.sys, 'platform', platform), patch.object(sina.metadata, 'version', side_effect=lookup):
+                sina._check_runtime_dependencies()
+                versions[conflicting] = '0.0.0'
+                with self.assertRaises(sina.SinaDependencyError):
+                    sina._check_runtime_dependencies()
 
     def test_outer_worker_is_time_bounded_has_no_stderr_and_checks_output(self):
         expected = fake_worker()
