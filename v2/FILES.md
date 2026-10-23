@@ -47,3 +47,17 @@
 - `tests/test_preview.py`
 - `启动预览.cmd`
 - `手机同网预览.cmd`
+
+
+## real_readonly基础版新增文件
+
+- `p1_dependency.py`：固定PR #3四个原始核心文件指纹，直接执行核验源码。
+- `readonly_fixture.py`：唯一数据提供者，代码内虚构输入与最小化投影。
+- `readonly_server.py`：仅本机认证测试接口、配对/会话/撤销/关闭，无真实文件入口。
+- `readonly.html`、`readonly.js`、`readonly-model.js`、`readonly.css`：独立模式入口；复用原外壳、样式和四页结构，不加载演示脚本。
+- `readonly_launcher.py`、`只读模式虚构测试.cmd`：Windows源码选择、启动/撤销/停止控制窗口。
+- `tests/test_readonly.py`、`tests/readonly-model.test.cjs`、`tests/readonly-browser.cjs`：安全、协议和浏览器功能验证。
+- `READONLY.md`及`docs/readonly-screenshots/`六张截图：中文操作说明及明确标注的虚构界面。
+- `../.github/workflows/v2-readonly.yml`：独立Windows/Linux测试，检出固定P1源码。未修改V1依赖锁或既有CI工作流。
+
+没有新增运行包；Python标准库+独立P1核心源码。Node/Playwright仅开发验证，普通用户不安装。

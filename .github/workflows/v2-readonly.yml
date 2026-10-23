@@ -1,0 +1,33 @@
+name: V2 readonly fixture integration
+on: [push, pull_request]
+jobs:
+  readonly:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: hengha298-maker/quant-trading
+          ref: f6c117fab964f2e627d1a64a651bab2827ff0308
+          path: _p1_dependency
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Pin and execute actual P1 validators
+        env:
+          GOOSE_P1_CODE: ${{ github.workspace }}/_p1_dependency
+        run: python -m unittest discover -s v2/tests -p test_readonly.py -v
+      - name: Original demo model
+        run: node v2/tests/model.test.cjs
+      - name: Original demo cache
+        run: node v2/tests/sw.test.cjs
+      - name: Readonly contract and mode isolation
+        run: node v2/tests/readonly-model.test.cjs
+      - name: Original preview remains demonstration only
+        run: python -m unittest discover -s v2/tests -p test_preview.py -v
