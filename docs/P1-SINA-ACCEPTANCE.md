@@ -46,4 +46,6 @@
 
 完整测试和CI结果记录在PR #3；Windows独立K2工具CI实际执行解码与集成测试，标准库环境跳过可选项会明确显示，不算通过。测试不替代用户新版本实机复验。
 
+Windows首次CI暴露了新增测试拦截器的兼容问题：mini-racer0.14.1创建asyncio循环，Windows用本机回环socketpair作为唤醒管道；测试原先拒绝所有socket.connect，连此内部IPC也拦截，表现为SinaDependencyError。测试已只允许字面回环地址127.0.0.1/::1，继续拒绝外部地址，并显式检查Windows socketpair与外部地址拒绝；PATH仍为空以验证无Git。不修改产品下载路径、TLS或行情校验，也不要求用户安装依赖。
+
 最短操作见 [Windows指南](../p1/SINA-VERIFICATION.md) 顶部：下载新ZIP，不覆盖V1.1和旧数据；复用已安装K2环境，不运行pip安装。持仓CSV与本地资产报告是下一阶段重点，边界及验收见 [衔接任务](P1-HOLDINGS-NEXT.md)。

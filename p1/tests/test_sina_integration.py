@@ -123,9 +123,25 @@ class Response:
     def geturl(self): return sina.URL
     def read(self, limit): return BODY[:limit]
 sina.build_opener = lambda *_args: SimpleNamespace(open=lambda *_a, **_k: Response())
-def no_network(*_a, **_k):
+original_connect = socket.socket.connect
+def no_network(sock, address):
+    # Windows asyncio (used by mini-racer 0.14.1) creates its wakeup pipe
+    # using a loopback socketpair. Preserve that OS IPC, forbid outbound I/O.
+    if sock.family in (socket.AF_INET, socket.AF_INET6) and isinstance(address, tuple) and address[0] in ('127.0.0.1', '::1'):
+        return original_connect(sock, address)
     raise AssertionError('offline integration forbids network')
 socket.socket.connect = no_network
+# Exercise the Windows IPC explicitly; Linux's old runtime does not need it.
+if sys.platform == 'win32':
+    left, right = socket._fallback_socketpair()
+    left.close()
+    right.close()
+try:
+    no_network(SimpleNamespace(family=socket.AF_INET), ('192.0.2.1', 443))
+except AssertionError:
+    pass
+else:
+    raise AssertionError('outbound test guard did not reject the connection')
 sys.argv = ['goose_research.sina'] + WORKER_ARGS
 runpy.run_module('goose_research.sina', run_name='__main__')
 '''.replace('BODY_LITERAL', repr(self.body)).replace('WORKER_ARGS', repr(command[3:]))
