@@ -52,9 +52,11 @@
   async function read(){
     if(state.busy||state.phase==='blocked')return;
     const ticket=++generation;pending?.abort();pending=new AbortController();let decoding=false;
+    const timeout=setTimeout(()=>{if(ticket===generation)clear('disconnected','连接已超时，已清空本页数据。请检查电脑和Tailscale。');},8000);
     try{
       const res=await fetch('/api/v1/view',{cache:'no-store',credentials:'same-origin',signal:pending.signal});
       if(ticket!==generation||document.visibilityState==='hidden')return;
+      if(res.status===403){clear('denied','此设备未获授权或安全连接验证失败。请在电脑重新选择iPhone。');return;}
       if(res.status===401){clear('unauthorized','未授权：会话可能已过期或撤销，请使用电脑新配对码。');return;}
       if(!res.ok)throw new Error('network');
       decoding=true;const length=Number(res.headers.get('Content-Length'));if(!Number.isFinite(length)||length<=0||length>128000)throw new TypeError('protocol');
@@ -66,39 +68,49 @@
       }
       state.data=next;state.phase='connected';state.message='';render();
     }catch(err){if(ticket!==generation||err.name==='AbortError')return;clear(decoding?'protocol':'disconnected',decoding?'数据协议不匹配，已拒绝显示；不会回填演示数据。':'连接已断开，已清空本页数据。请检查电脑测试服务。');}
+    finally{clearTimeout(timeout);}
   }
   document.addEventListener('submit',async event=>{
     if(event.target.id!=='pair-form')return;event.preventDefault();if(state.busy||state.phase==='blocked')return;
     const code=new FormData(event.target).get('code');event.target.reset();const ticket=++generation;state.busy=true;state.message='正在验证配对…';render();
+    pending?.abort();pending=new AbortController();
+    const timeout=setTimeout(()=>{if(ticket===generation)clear('disconnected','配对连接已超时，未加载数据。请检查电脑和Tailscale。');},8000);
     try{
-      const res=await fetch('/session/pair',{method:'POST',cache:'no-store',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({code})});
+      const res=await fetch('/session/pair',{method:'POST',cache:'no-store',credentials:'same-origin',signal:pending.signal,headers:{'Content-Type':'application/json'},body:JSON.stringify({code})});
       if(ticket!==generation)return;
+      clearTimeout(timeout);
       state.busy=false;
-      if(!res.ok){clear('unauthorized','配对失败：码错误、已用、过期或尝试次数过多。请在电脑更新配对码。');return;}
+      if(!res.ok){clear('unauthorized','配对失败：请确认设备已授权，配对码正确、未用且未过期。请在电脑更新配对码。');return;}
       await read();
     }catch(_){if(ticket===generation){state.busy=false;clear('disconnected','无法连接电脑测试服务，未加载数据。');}}
-    finally{state.busy=false;}
+    finally{clearTimeout(timeout);state.busy=false;}
   });
   document.addEventListener('click',async event=>{
     const button=event.target.closest('button');if(!button)return;
     if(button.dataset.action==='refresh'){await read();return;}
     if(button.dataset.action==='logout'){
-      clear('revoked','已退出，本页数据已清空。');state.busy=true;render();
-      try{await fetch('/session/logout',{method:'POST',cache:'no-store',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:'{}'});}catch(_){}
-      finally{state.busy=false;render();}return;
+      clear('revoked','本页数据已清空，正在撤销电脑会话。');state.busy=true;render();
+      const ticket=generation;pending=new AbortController();const timeout=setTimeout(()=>pending?.abort(),8000);
+      try{
+        const res=await fetch('/session/logout',{method:'POST',cache:'no-store',credentials:'same-origin',signal:pending.signal,headers:{'Content-Type':'application/json'},body:'{}'});
+        if(ticket===generation)clear(res.ok?'revoked':'disconnected',res.ok?'已退出并撤销会话，本页数据已清空。':'本页数据已清空，未能确认服务端撤销。请在电脑停止分享。');
+      }catch(_){if(ticket===generation)clear('disconnected','本页数据已清空，未能确认服务端撤销。请在电脑停止分享。');}
+      finally{clearTimeout(timeout);state.busy=false;render();}return;
     }
     if(button.dataset.action==='privacy'){state.hidden=!state.hidden;render();return;}
     if(button.dataset.account&&state.data){state.account=button.dataset.account;render();return;}
     if(button.id==='close-dialog'){dialog.close();return;}
-    if(button.dataset.dialog){dialogContent.innerHTML=`<h2 id="dialog-title">连接与权限</h2><p>${state.data?'已通过虚构测试配对；数据来自指定P1校验器。':'当前未加载账户数据。'}</p><p>真实持仓、手机访问、HTTPS、云同步、Bark和交易均未启用。关闭电脑测试服务即可停止访问。</p>${state.data?times():''}`;dialog.showModal();}
+    if(button.dataset.dialog){dialogContent.innerHTML=`<h2 id="dialog-title">连接与权限</h2><p>${state.data?'已通过虚构测试配对；数据来自指定P1校验器。':'当前未加载账户数据。'}</p><p>仅虚构数据；手机需电脑指定设备、Tailscale私网HTTPS和配对码。真实持仓、云同步、Bark和交易未启用。在电脑停止分享可撤销会话并关闭连接。</p>${state.data?times():''}`;dialog.showModal();}
   });
   window.addEventListener('hashchange',()=>{render();main.focus({preventScroll:true});window.scrollTo(0,0);});
   document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')clear('locked','页面已锁定，返回前台后重新检查会话。');else read();});
   window.addEventListener('pagehide',()=>clear('locked','页面已锁定，需重新检查会话。'));
   window.addEventListener('pageshow',event=>{if(event.persisted){clear('locked','已返回页面，正在重新检查会话。');read();}});
   document.getElementById('settings-icon').innerHTML=icon('reports');
-  if(location.protocol!=='http:'||location.hostname!=='127.0.0.1'||('serviceWorker' in navigator&&navigator.serviceWorker.controller)){
-    clear('blocked','测试入口或旧离线缓存不符合要求。请停止测试并改用新的本机端口。');return;
+  const localFixture=location.protocol==='http:'&&location.hostname==='127.0.0.1';
+  const tailnetFixture=location.protocol==='https:'&&location.port==='8443'&&/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.ts\.net$/.test(location.hostname);
+  if((!localFixture&&!tailnetFixture)||('serviceWorker' in navigator&&navigator.serviceWorker.controller)){
+    clear('blocked','测试入口或旧离线缓存不符合要求。请使用控制窗口给出的本机或私网HTTPS地址。');return;
   }
   render();read();setInterval(()=>{if(state.data&&document.visibilityState==='visible')read();},15000);
 })();

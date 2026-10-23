@@ -26,6 +26,7 @@ async function start(scenario='normal'){
   }
   await page.locator('.bottom-nav a[href="#/holdings"]').click();
   await page.locator('a[href="#/holdings/account-2/515450.SH"]').click();
+  await page.getByText('原始历史收盘数值 · 单位未核验',{exact:true}).waitFor();
   assert.match(await page.locator('main').innerText(),/原始历史收盘数值 · 单位未核验/);
   assert.match(await page.locator('main').innerText(),/1\.234/);assert.match(await page.locator('main').innerText(),/未知/);
   await page.getByRole('link',{name:'← 返回持仓'}).click();count++;

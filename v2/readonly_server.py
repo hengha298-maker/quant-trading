@@ -1,7 +1,7 @@
-"""Authenticated LOOPBACK FICTIONAL ONLY bridge. Real file inputs are absent.
+"""Authenticated FICTIONAL ONLY bridge; real file inputs remain absent.
 
-HTTP is allowed solely for this fixture-only 127.0.0.1 development harness.
-There is NO option to enable real holdings, LAN, TLS termination or proxy trust.
+The original loopback harness and the separately supervised Tailscale transport
+share authentication, fixed assets, P1 validation and the same fixture provider.
 """
 import argparse
 from copy import deepcopy
@@ -38,6 +38,7 @@ class Access:
         self.closed = False
         self.session = None
         self.expires = 0
+        self.binding = None
         self.rotate()
 
     def rotate(self):
@@ -45,12 +46,13 @@ class Access:
             if self.closed:
                 raise ValueError('closed')
             self.session = None
+            self.binding = None
             self.pair_code = f'{secrets.randbelow(100_000_000):08d}'
             self.pair_expires = self.clock()+300
             self.failures = 0
             return self.pair_code
 
-    def pair(self, code):
+    def pair(self, code, binding=None):
         with self.lock:
             if self.closed or self.pair_code is None or self.clock() >= self.pair_expires or self.failures >= 5:
                 return None
@@ -59,17 +61,19 @@ class Access:
                 return None
             self.pair_code = None
             self.session = secrets.token_urlsafe(32)
+            self.binding = binding
             self.expires = self.clock()+900
             return self.session
 
-    def authorized(self, token):
+    def authorized(self, token, binding=None):
         with self.lock:
-            return bool(not self.closed and self.session and self.clock()<self.expires and
+            return bool(not self.closed and self.binding == binding and self.session and self.clock()<self.expires and
                 isinstance(token,str) and re.fullmatch(r'[A-Za-z0-9_-]{43}',token) and hmac.compare_digest(token,self.session))
 
     def revoke(self):
         with self.lock:
             self.session = None
+            self.binding = None
             self.pair_code = None
 
     def close(self):
@@ -99,10 +103,18 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header(key,value)
         if cookie:
             self.send_header('Set-Cookie',cookie)
+        if self.server.secure_transport:
+            self.send_header('Strict-Transport-Security','max-age=86400')
         self.end_headers()
         if self.command != 'HEAD':
             self.wfile.write(body)
     def _guard(self, post=False):
+        self.device_binding = None
+        if self.server.transport is not None:
+            try:
+                self.device_binding = self.server.transport.verify(self)
+            except (ValueError, OSError):
+                self._send(403,dict(error='device_denied'));return False
         hosts = self.headers.get_all('Host', [])
         origin = self.headers.get_all('Origin', [])
         if hosts != [self.server.authority] or self.path not in set(ASSETS)|{'/api/v1/view','/session/pair','/session/logout'}:
@@ -125,7 +137,7 @@ class Handler(BaseHTTPRequestHandler):
         if not self._guard(): return
         if self.path == '/api/v1/view':
             with self.server.access.lock:
-                if not self.server.access.authorized(self._token()):
+                if not self.server.access.authorized(self._token(),self.device_binding):
                     self._send(401,dict(error='unauthorized'));return
                 self._send(200,deepcopy(self.server.access.view))
             return
@@ -164,17 +176,17 @@ class Handler(BaseHTTPRequestHandler):
         except (ValueError,UnicodeError,TimeoutError,OSError):
             self._send(400,dict(error='invalid_request'));return
         if self.path == '/session/pair':
-            token = self.server.access.pair(body.get('code')) if set(body)=={'code'} else None
+            token = self.server.access.pair(body.get('code'),self.device_binding) if set(body)=={'code'} else None
             if token is None:
                 self._send(401,dict(error='pair_denied'));return
-            # Test-only HTTP cookie. A production __Host- Secure cookie is NOT
-            # claimed here; real data is blocked until a separate HTTPS release.
-            self._send(200,dict(status='paired',test_data=True),cookie=f'{self.server.cookie_name}={token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=900')
+            secure='; Secure' if self.server.secure_transport else ''
+            self._send(200,dict(status='paired',test_data=True),cookie=f'{self.server.cookie_name}={token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=900{secure}')
         else:
-            if body or not self.server.access.authorized(self._token()):
+            if body or not self.server.access.authorized(self._token(),self.device_binding):
                 self._send(401,dict(error='unauthorized'));return
             self.server.access.revoke()
-            self._send(200,dict(status='revoked'),cookie=f'{self.server.cookie_name}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0')
+            secure='; Secure' if self.server.secure_transport else ''
+            self._send(200,dict(status='revoked'),cookie=f'{self.server.cookie_name}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0{secure}')
     def _deny(self):
         if self._guard(): self._send(405,dict(error='read_only'))
     do_PUT=do_PATCH=do_DELETE=do_OPTIONS=do_TRACE=do_CONNECT=_deny
@@ -202,6 +214,8 @@ def create_server(p1_code, *, port=9876, scenario='normal'):
         raise ValueError('Fixture projection too large')
     server=FixtureServer(('127.0.0.1',port),Handler)
     server.access=Access(view)
+    server.transport=None
+    server.secure_transport=False
     server.authority=f'127.0.0.1:{server.server_port}'
     server.origin='http://'+server.authority
     server.cookie_name='goose_v2_fixture_'+str(server.server_port)

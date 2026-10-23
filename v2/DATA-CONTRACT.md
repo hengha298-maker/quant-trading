@@ -1,6 +1,6 @@
 # V2 只读展示数据约定
 
-新增real_readonly接口基础版见[READONLY.md](READONLY.md)：当前仅代码内虚构输入、认证本机访问，真实文件和HTTPS入口仍关闭。本文件继续描述原演示入口的约定。
+新增real_readonly接口基础版见[READONLY.md](READONLY.md)，第二阶段私网HTTPS及设备授权见[PHONE-HTTPS.md](PHONE-HTTPS.md)。两个入口均仅代码内虚构输入，真实文件仍关闭；本文件继续描述原演示入口约定。
 
 本约定描述当前 `demo-data.js`、`model.js` 和页面之间的边界，以及为未来 P1 展示保留的映射函数。它不是已经接通的数据导入或云同步接口。**当前页面只接收虚构演示，不能从界面导入 CSV、JSON 或真实持仓。**
 

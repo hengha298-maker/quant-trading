@@ -1,6 +1,6 @@
 # 新增文件与依赖清单
 
-本轮所有提交文件均位于 `v2/`。没有修改 V1.1、PR #3、根目录依赖或 Windows 环境。
+应用文件位于 `v2/`，另有独立V2 CI工作流。没有修改 V1.1、PR #3、根目录依赖或 Windows 环境。
 
 - 页面运行：原生 HTML / CSS / JavaScript，无第三方运行依赖和构建步骤。
 - 本地预览：已有 Python 3.12+ 标准库；两个 `.cmd` 仅选择已有 Python 并启动预览。
@@ -61,3 +61,14 @@
 - `../.github/workflows/v2-readonly.yml`：独立Windows/Linux测试，检出固定P1源码。未修改V1依赖锁或既有CI工作流。
 
 没有新增运行包；Python标准库+独立P1核心源码。Node/Playwright仅开发验证，普通用户不安装。
+
+## iPhone安全连接第二阶段
+
+- `tailscale_transport.py`：本机Tailscale CLI适配、设备身份复核、前台Serve监督及关闭。
+- `phone_launcher.py`、`iPhone安全连接虚构测试.cmd`：中文设备选择/授权/启动/撤销/停止窗口。
+- `PHONE-HTTPS.md`：分批安装、连接与停止；实际完成和未验收范围。
+- `tests/test_phone.py`：虚构设备边界、P1夹具HTTP集成、前台生命周期，Windows原生窗口/Job测试。
+- `tests/phone_fixture_host.py`、`tests/phone-browser.cjs`：开发专用临时TLS代理替身和浏览器测试，不能作为真实Serve启动器。
+- 复用并小幅修改`readonly_server.py`认证设备绑定/Secure Cookie、`readonly.js`HTTPS和403/超时处理、`readonly.html`连接说明，以及既有文档/V2专用CI。
+
+新增外部运行前提仅为**用户自行安装登录的官方Tailscale**；没有新增pip/npm运行依赖。原演示JS、样式、P1源码、V1工作流及依赖锁保持原样。
