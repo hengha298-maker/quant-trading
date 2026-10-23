@@ -1,0 +1,36 @@
+name: P1 isolated research
+on: [push, pull_request]
+jobs:
+  p1:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python p1/check_private.py --all
+      - working-directory: p1
+        run: python -m unittest discover -s tests -v
+  sina-tools:
+    # Separate from V1's unchanged dependency lock: the two MiniRacer
+    # distributions share a namespace and must not coexist in the P1 tool env.
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r p1/requirements-sina.txt
+      - working-directory: p1
+        run: python -c "from goose_research.sina import _check_runtime_dependencies; _check_runtime_dependencies()"
+      - working-directory: p1
+        run: python -m unittest discover -s tests -p test_sina_codec.py -v
+      - working-directory: p1
+        run: python -m unittest discover -s tests -v
+      - run: python -m pip check
