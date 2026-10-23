@@ -199,7 +199,13 @@ def validate_market(doc):
     if 'provenance' in doc:
         provenance = doc['provenance']
         fields(provenance, ('provider', 'symbol', 'response_sha256', 'decoder', 'raw_start', 'raw_end',
-                            'raw_count', 'volume_unit', 'adjustment_verified', 'raw_order_verified'), ('encoding',))
+                            'raw_count', 'volume_unit', 'adjustment_verified', 'raw_order_verified'),
+               ('encoding', 'api_rows_match', 'usage', 'price_unit_verified', 'volume_unit_verified'))
+        policy_keys = {'api_rows_match', 'usage', 'price_unit_verified', 'volume_unit_verified'}
+        if policy_keys & provenance.keys():
+            require(policy_keys <= provenance.keys(), '备用源用途限制必须完整')
+            require(provenance['api_rows_match'] is True and provenance['usage'] == 'raw_observation_only')
+            require(provenance['price_unit_verified'] is False and provenance['volume_unit_verified'] is False)
         if 'encoding' in provenance:
             validate_sina_encoding(provenance['encoding'])
         require(provenance['provider'] == 'sina' and provenance['symbol'] == 'sh515450')

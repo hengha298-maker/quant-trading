@@ -47,7 +47,7 @@ def candidate(rows=None):
                 raw_start='2026-10-16', raw_end='2026-10-19', raw_count=max(2, len(rows)),
                 response_sha256='a' * 64, decoder='akshare-1.19.1',
                 encoding=dict(wrapper='KLC_K2_sh515450', codec=3466, version=0, response_bytes=128),
-                volume_unit='源站原始值（AKShare文档称手，未核验）')
+                volume_unit='源站原始值（AKShare文档称手，未核验）', api_rows_match=True)
 
 
 def snapshot():
@@ -59,8 +59,8 @@ def snapshot():
 
 class FallbackTests(unittest.TestCase):
     def setUp(self):
-        # Real availability has not been verified. Only tests override the gate.
-        self.gate = patch.object(market, 'SINA_DAILY_VERIFIED', True)
+        # Explicitly exercise the observation-only collection gate and its rollback.
+        self.gate = patch.object(market, 'SINA_DAILY_OBSERVATION_ENABLED', True)
         self.gate.start()
         self.addCleanup(self.gate.stop)
         self.secondary = Mock(side_effect=lambda *args: candidate())
@@ -148,8 +148,8 @@ class FallbackTests(unittest.TestCase):
                 self.assertEqual(result['error_type'], 'AllSourcesUnavailable')
                 self.assertEqual(result['provider_attempts'][-1]['status'], 'unavailable')
 
-    def test_default_unverified_gate_skips_without_calling_candidate(self):
-        with patch.object(market, 'SINA_DAILY_VERIFIED', False):
+    def test_disabled_gate_skips_without_calling_candidate(self):
+        with patch.object(market, 'SINA_DAILY_OBSERVATION_ENABLED', False):
             result = self.fetch(disconnected)
         self.assert_unavailable(result)
         self.assertEqual(result['error_type'], 'SourceNotVerified')
@@ -157,9 +157,9 @@ class FallbackTests(unittest.TestCase):
                          dict(provider='sina', status='skipped', error_type='SourceNotVerified'))
         self.secondary.assert_not_called()
 
-    def test_forced_unverified_candidate_is_also_skipped(self):
+    def test_forced_disabled_candidate_is_also_skipped(self):
         opener = Mock(side_effect=AssertionError('primary should not run'))
-        with patch.object(market, 'SINA_DAILY_VERIFIED', False):
+        with patch.object(market, 'SINA_DAILY_OBSERVATION_ENABLED', False):
             result = self.fetch(opener, source='sina')
         self.assert_unavailable(result)
         self.assertEqual(result['provider_attempts'],
@@ -266,7 +266,7 @@ class FallbackTests(unittest.TestCase):
 
 class ProvenanceAndReportTests(unittest.TestCase):
     def observed(self):
-        with patch.object(market, 'SINA_DAILY_VERIFIED', True):
+        with patch.object(market, 'SINA_DAILY_OBSERVATION_ENABLED', True):
             return market.fetch('515450.SH', 'daily', disconnected, now=NOW,
                                 sina_fetcher=Mock(return_value=candidate()))
 

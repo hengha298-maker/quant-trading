@@ -22,7 +22,7 @@ def main(argv=None):
     market.add_argument('symbol')
     market.add_argument('--interval', choices=['daily', 'minute'], default='daily')
     market.add_argument('--source', choices=['auto', 'eastmoney', 'sina'], default='auto',
-                        help='默认主源优先；新浪须先真实验收，且仅支持515450.SH日线')
+                        help='默认主源优先；新浪仅支持515450.SH原始日线观察，不用于估值或建议')
     market.add_argument('--expected-last-date', help='独立核对的最后完整交易日 YYYY-MM-DD；不接受未收盘当日')
     report = subs.add_parser('report')
     report.add_argument('snapshot')

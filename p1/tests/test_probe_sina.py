@@ -180,7 +180,7 @@ class SinaProbeTests(unittest.TestCase):
                 probe._original_api()
 
     def test_probe_does_not_read_holdings_save_or_modify_gate(self):
-        self.assertIs(market.SINA_DAILY_VERIFIED, False)
+        self.assertIs(market.SINA_DAILY_OBSERVATION_ENABLED, True)
         summary = worker_summary()
         def runner(_command, **kwargs):
             kwargs['stdout'].write(json.dumps(summary).encode())
@@ -188,7 +188,7 @@ class SinaProbeTests(unittest.TestCase):
         with patch.object(market, 'save', side_effect=AssertionError('must not save')), patch.object(market, 'fetch', side_effect=AssertionError('must not collect')):
             result = probe.probe(runner=runner, now=NOW)
         self.assertFalse(result['gate_changed'])
-        self.assertIs(market.SINA_DAILY_VERIFIED, False)
+        self.assertIs(market.SINA_DAILY_OBSERVATION_ENABLED, True)
 
     def test_outer_rejects_oversize_duplicate_malformed_and_false_success(self):
         invalid = worker_summary(); invalid['api_rows_match'] = False

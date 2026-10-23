@@ -165,7 +165,10 @@ def _report(code, trace, status, error, worker_matches=None):
                 failed_check=None if failed is None else failed['check'],
                 code=code, worker_matches_parent=worker_matches, stages=trace.items,
                 not_reached=[s for s in STAGES if not any(i['stage'] == s for i in trace.items)],
-                gate_changed=False, source_gate_enabled=market.SINA_DAILY_VERIFIED is True)
+                gate_changed=False, source_gate_enabled=market.SINA_DAILY_OBSERVATION_ENABLED is True,
+                source_usage='raw_observation_only', price_unit_verified=False,
+                volume_unit_verified=False, adjustment_verified=False,
+                valuation_enabled=False, volume_analysis_enabled=False, advice_enabled=False)
 
 
 def _worker(argv):

@@ -25,8 +25,7 @@ API = 'akshare.fund_etf_hist_sina'
 BASES = ('conservative_weekday_not_exchange_calendar', 'user_confirmed_date_not_calendar_verification')
 
 
-class SinaApiMismatchError(sina.SinaError):
-    pass
+SinaApiMismatchError = sina.SinaApiMismatchError
 
 
 class SinaStaleDataError(sina.SinaError):

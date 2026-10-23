@@ -1,7 +1,7 @@
 """Isolated public quotes; one provider per immutable observation batch.
 
-Sina is deliberately gated until a real 515450 verification is recorded. The
-separate probe can be run without holdings and never enables a source silently.
+Sina is enabled ONLY for raw observations after the 2026-10-23 Windows
+acceptance. Price/volume units and adjustment semantics remain unverified.
 """
 from datetime import date, datetime, timezone, timedelta, time
 from decimal import Decimal
@@ -13,7 +13,9 @@ from .storage import save
 from .validation import validate_market, day
 
 BJ = timezone(timedelta(hours=8))
-SINA_DAILY_VERIFIED = False
+# Collection gate, not a certification for valuation, volume analysis or advice.
+# Evidence and remaining restrictions: docs/P1-SINA-ACCEPTANCE.md.
+SINA_DAILY_OBSERVATION_ENABLED = True
 SINA_SOURCE = '新浪公开日线（AKShare 固定解码器）'
 SINA_ADJUSTMENT = '源站原始价格（复权口径未核验）'
 
@@ -142,12 +144,16 @@ def _sina(symbol, begin, end, now, expected, basis, fetcher=None):
             from .sina import fetch_sina_rows
             fetcher = fetch_sina_rows
         raw = fetcher(symbol, begin, end)
+        if raw.get('api_rows_match') is not True:
+            raise ValueError('备用源必须逐批核对原API')
         result['adjustment'] = SINA_ADJUSTMENT
         result['url'] = raw['requested_url']
         result['provenance'] = dict(provider='sina', symbol='sh515450',
             response_sha256=raw['response_sha256'], decoder=raw['decoder'],
             raw_start=raw['raw_start'], raw_end=raw['raw_end'], raw_count=raw['raw_count'],
             volume_unit=raw['volume_unit'], adjustment_verified=False, raw_order_verified=True)
+        result['provenance'].update(api_rows_match=True, usage='raw_observation_only',
+                                    price_unit_verified=False, volume_unit_verified=False)
         if 'encoding' in raw:
             result['provenance']['encoding'] = raw['encoding']
         return _observed(result, raw['rows'], now, expected, basis)
@@ -178,9 +184,9 @@ def fetch(symbol, interval, opener=urlopen, *, source='auto', expected_last_date
         if primary['status'] == 'observed' or source == 'eastmoney' or (symbol, interval) != ('515450.SH', 'daily'):
             primary['provider_attempts'] = attempts
             return validate_market(primary)
-    if not SINA_DAILY_VERIFIED:
+    if not SINA_DAILY_OBSERVATION_ENABLED:
         attempts.append(dict(provider='sina', status='skipped', error_type='SourceNotVerified'))
-        result = _base(symbol, interval, '无可用来源（新浪尚未验收）', begin, end, now)
+        result = _base(symbol, interval, '无可用来源（新浪观察源未启用）', begin, end, now)
         result['error_type'] = 'SourceNotVerified'
     else:
         result = _sina(symbol, begin, end, now, expected, basis, sina_fetcher)

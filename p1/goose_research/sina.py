@@ -63,6 +63,10 @@ class SinaDecodeError(SinaError):
     pass
 
 
+class SinaApiMismatchError(SinaError):
+    pass
+
+
 class Download(NamedTuple):
     compressed: str
     text: str
@@ -295,10 +299,17 @@ def _normalise_rows(decoded):
     return result
 
 
-def _fetch_worker(symbol, begin, end, opener=None, decoder=None):
+def _fetch_worker(symbol, begin, end, opener=None, decoder=None, verifier=None):
     begin, end = _bounds(symbol, begin, end)
     downloaded = _download(opener)
     rows = _normalise_rows((decoder or _decode_payload)(downloaded.compressed))
+    # Same check as the accepted probe, against the exact downloaded body and
+    # every original row, BEFORE clipping. No second network request is made.
+    if verifier is None:
+        from .probe_sina import _verify_original_api
+        verifier = _verify_original_api
+    if verifier(downloaded, rows) is not True:
+        raise SinaApiMismatchError()
     # Validate the entire original history before clipping: an invalid old row
     # cannot disappear merely because it lies outside the requested interval.
     selected = [row for row in rows if begin <= row['time'] <= end]
@@ -307,7 +318,8 @@ def _fetch_worker(symbol, begin, end, opener=None, decoder=None):
     return dict(rows=selected, raw_start=rows[0]['time'], raw_end=rows[-1]['time'], raw_count=len(rows),
                 response_sha256=downloaded.response_sha256, encoding=downloaded.encoding,
                 requested_url=URL, decoder='akshare-' + AKSHARE_VERSION,
-                volume_unit=VOLUME_UNIT, adjustment='unknown', adjustment_note=ADJUSTMENT_NOTE)
+                volume_unit=VOLUME_UNIT, adjustment='unknown', adjustment_note=ADJUSTMENT_NOTE,
+                api_rows_match=True)
 
 
 def _unique_pairs(pairs):
@@ -326,11 +338,11 @@ def _reject_constant(_value):
 def _validate_result(result, begin, end):
     try:
         fields(result, ('rows', 'raw_start', 'raw_end', 'raw_count', 'response_sha256',
-                        'requested_url', 'decoder', 'volume_unit', 'adjustment', 'adjustment_note', 'encoding'))
+                        'requested_url', 'decoder', 'volume_unit', 'adjustment', 'adjustment_note', 'encoding', 'api_rows_match'))
         validate_sina_encoding(result['encoding'])
         if (result['requested_url'] != URL or result['decoder'] != 'akshare-' + AKSHARE_VERSION or
                 result['volume_unit'] != VOLUME_UNIT or result['adjustment'] != 'unknown' or
-                result['adjustment_note'] != ADJUSTMENT_NOTE or
+                result['adjustment_note'] != ADJUSTMENT_NOTE or result['api_rows_match'] is not True or
                 not isinstance(result['response_sha256'], str) or
                 not re.fullmatch(r'[0-9a-f]{64}', result['response_sha256']) or
                 type(result['raw_count']) is not int or not 0 < result['raw_count'] <= MAX_ROWS):
@@ -389,7 +401,7 @@ def fetch_sina_rows(symbol, begin, end, runner=subprocess.run):
         result = json.loads(raw, object_pairs_hook=_unique_pairs, parse_constant=_reject_constant)
         if completed.returncode != 0:
             errors = {'dependency': SinaDependencyError, 'timeout': SinaTimeoutError, 'encoding': SinaEncodingError,
-                      'response': SinaResponseError, 'decode': SinaDecodeError}
+                      'response': SinaResponseError, 'decode': SinaDecodeError, 'api_mismatch': SinaApiMismatchError}
             if isinstance(result, dict) and set(result) == {'error'} and result['error'] in errors:
                 raise errors[result['error']]()
             raise SinaError()
@@ -414,10 +426,13 @@ def _main(argv=None):
         sys.stdout.buffer.write(raw)
         return 0
     except Exception as exc:
-        category = 'dependency' if isinstance(exc, SinaDependencyError) else 'timeout' if isinstance(exc, SinaTimeoutError) else 'encoding' if isinstance(exc, SinaEncodingError) else 'decode' if isinstance(exc, SinaDecodeError) else 'response'
+        category = 'dependency' if isinstance(exc, SinaDependencyError) else 'timeout' if isinstance(exc, SinaTimeoutError) else 'encoding' if isinstance(exc, SinaEncodingError) else 'api_mismatch' if isinstance(exc, SinaApiMismatchError) else 'decode' if isinstance(exc, SinaDecodeError) else 'response'
         sys.stdout.buffer.write(json.dumps({'error': category}).encode('ascii'))
         return 1
 
 
 if __name__ == '__main__':
-    raise SystemExit(_main())
+    # Use one module identity: the shared probe verifier imports .sina too.
+    # Otherwise -m would create two distinct SinaError class hierarchies.
+    from . import sina as worker_module
+    raise SystemExit(worker_module._main())

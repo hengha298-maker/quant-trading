@@ -48,10 +48,17 @@ def bars():
 def fake_worker(decoded=None, response=None, begin='2025-01-03', end='2025-01-06'):
     return sina._fetch_worker('515450.SH', begin, end,
                               opener=lambda *_args, **_kwargs: response or Response(),
-                              decoder=lambda payload: bars() if decoded is None else decoded)
+                              decoder=lambda payload: bars() if decoded is None else decoded,
+                              verifier=lambda *_args: True)
 
 
 class SinaCandidateTests(unittest.TestCase):
+    def test_collection_rejects_api_disagreement_before_selecting_rows(self):
+        with self.assertRaises(sina.SinaApiMismatchError):
+            sina._fetch_worker('515450.SH', '2025-01-03', '2025-01-06',
+                opener=lambda *_a, **_k: Response(), decoder=lambda _s: bars(),
+                verifier=lambda _downloaded, _rows: False)
+
     def test_single_complete_trailing_comment_preserves_body_hash_and_payload(self):
         for wrapper, payload in [('KLC_KL_sh515450', 'HX/FICTIONAL'), ('KLC_K2_sh515450', 'K2/3rPXFICTIONAL')]:
             base = ('var ' + wrapper + '="' + payload + '";').encode()
@@ -127,7 +134,7 @@ class SinaCandidateTests(unittest.TestCase):
         def opener(request, timeout):
             calls.append((request.full_url, timeout))
             return response
-        sina._fetch_worker('515450.SH', date(2025, 1, 2), date(2025, 1, 6), opener=opener, decoder=lambda _s: bars())
+        sina._fetch_worker('515450.SH', date(2025, 1, 2), date(2025, 1, 6), opener=opener, decoder=lambda _s: bars(), verifier=lambda *_a: True)
         self.assertEqual(calls, [(sina.URL, 15)])
         self.assertEqual(response.read_limit, 8_000_001)
 
@@ -267,7 +274,8 @@ class SinaCandidateTests(unittest.TestCase):
             raise subprocess.TimeoutExpired('never expose command', 45)
         with self.assertRaises(sina.SinaTimeoutError):
             sina.fetch_sina_rows('515450.SH', '2025-01-03', '2025-01-06', runner=timeout)
-        for category, error in [('dependency', sina.SinaDependencyError), ('encoding', sina.SinaEncodingError)]:
+        for category, error in [('dependency', sina.SinaDependencyError), ('encoding', sina.SinaEncodingError),
+                                ('api_mismatch', sina.SinaApiMismatchError)]:
             def missing(_command, **kwargs):
                 kwargs['stdout'].write(json.dumps({'error': category}).encode())
                 return types.SimpleNamespace(returncode=1)
@@ -284,6 +292,7 @@ class SinaCandidateTests(unittest.TestCase):
 
     def test_outer_rechecks_worker_identity_metadata_and_rows(self):
         for mutate in [lambda result: result.update(requested_url='http://wrong.invalid'),
+                       lambda result: result.update(api_rows_match=False),
                        lambda result: result.update(decoder='unversioned'),
                        lambda result: result['encoding'].update(codec=1478),
                        lambda result: result['rows'].reverse(),

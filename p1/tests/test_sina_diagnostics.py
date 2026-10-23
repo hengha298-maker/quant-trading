@@ -135,11 +135,15 @@ class DiagnosticTests(unittest.TestCase):
         self.assertTrue(report['worker_matches_parent'])
         self.assertEqual(report['not_reached'], [])
         self.assertFalse(report['gate_changed'])
-        self.assertFalse(report['source_gate_enabled'])
+        self.assertTrue(report['source_gate_enabled'])
+        self.assertEqual(report['source_usage'], 'raw_observation_only')
+        for key in ('price_unit_verified', 'volume_unit_verified', 'adjustment_verified',
+                    'valuation_enabled', 'volume_analysis_enabled', 'advice_enabled'):
+            self.assertIs(report[key], False)
         text = json.dumps(report)
         for forbidden in (SECRET, 'K2/FICTIONAL', 'first_bar', 'last_bar', 'open', 'high', 'volume', 'rows', 'Content-Length'):
             # Stage/check names such as "rows" are allowed; price-bearing keys aren't.
-            if forbidden in ('open', 'rows'):
+            if forbidden in ('open', 'rows', 'volume'):
                 self.assertNotIn('"' + forbidden + '":', text)
             else:
                 self.assertNotIn(forbidden, text)

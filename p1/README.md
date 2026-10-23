@@ -2,11 +2,13 @@
 
 此目录为独立只读研究台。**不要在宿舍电脑现有 V1.1 目录升级、安装或运行原 scripts。** 审核阶段只在另一测试目录检出本 Draft PR；不合并、不部署。
 
-## 515450 日线故障与新浪候选源（2026-10-22）
+## 515450 日线备用源（2026-10-23更新）
 
-东方财富接口保留。已增加独立的新浪日线候选适配器、回退路径及脱敏探测命令，但**尚未取得真实新浪响应，备用源保持未启用**：本轮环境的出口代理拒绝访问 `finance.sina.com.cn`（403）。不能把离线测试通过写成真实行情验证成功。当前主源失败时保存 `unavailable`，并明确记录新浪为 `skipped / SourceNotVerified`，不产生交易建议。
+用户Windows实机已通过完整采集/原API/新鲜度核验。本版启用**新浪515450原始日线观察备用源**：默认仍先东方财富，主源通过时不调用新浪；失败才回退。每批均重新校验完整响应、原始历史、原API及新鲜度，不固定沿用验收当天的日期或条数。
 
-Windows / 无 Git 的 ZIP 用户可直接按 [新浪核验新手指南](SINA-VERIFICATION.md) 执行。最新修复已支持并核对K2/3466与旧KL/1479两种编码，原API比较保留原始正文；ZIP下原有测试对`.git`的隐式依赖已移除。真实解码器测试使用人工编码样本，不能冒充515450真实响应。默认 P1 及离线测试仍只需 Python 标准库，可选真实解码器测试会明确跳过；独立新浪探测需要在源码和 V1.1 之外安装固定的可选依赖。详见 [K2修复与验证记录](../docs/P1-SINA-K2.md) 和 [ETF备用源首轮记录](../docs/P1-ETF-FALLBACK.md)。
+**价格单位、成交量单位、服务端复权口径尚未独立确认**。新浪数据不进入估值、费用、量价信号或投资建议；保留源站原值及unknown口径，不乘除100。此次不是对所有用途完全放行。证据和逐项权限见[验收与接入记录](../docs/P1-SINA-ACCEPTANCE.md)。
+
+已安装K2工具的用户直接看[Windows最短步骤](SINA-VERIFICATION.md)，无需重装依赖或Git。标准库环境仍能使用P1；只有实际调用新浪或运行真实解码集成测试才需要已有的独立工具环境。下一阶段复用CSV和本地报告，衔接范围见[持仓与V2任务](../docs/P1-HOLDINGS-NEXT.md)，当前不连接手机真实数据或云端。
 
 ## Windows Python 3.12
 
@@ -55,13 +57,13 @@ py -3.12 -m goose_research --data-dir "$P1Data" import-csv (Join-Path $P1Data 'h
 
 ```powershell
 py -3.12 -m goose_research --data-dir "$P1Data" collect 600900.SH
-py -3.12 -m goose_research --data-dir "$P1Data" collect 515450.SH
+& (Join-Path $env:LOCALAPPDATA 'GooseP1SinaTools-K2-1.19.1\Scripts\python.exe') -m goose_research --data-dir "$P1Data" collect 515450.SH
 py -3.12 -m goose_research --data-dir "$P1Data" collect 600900.SH --interval minute
 ```
 
 每次返回独立行情JSON路径。**collect退出0只代表采集记录已保存，不代表行情获取成功**：检查报告中的 status、error_type、实际范围；失败为 unavailable。网络不可用也可生成报告。
 
-日线新增 `--source auto|eastmoney|sina`，默认 `auto`；新浪只适用 `515450.SH` 日线且受真实验收门禁控制。日线默认要求北京时间16点前的上一工作日、16点后的当日（周末退回工作日），不接受未结束的当日日线。此规则不是交易所日历，节假日可能保守拒绝；仅在独立核对最后完整交易日后使用 `--expected-last-date YYYY-MM-DD`。新采集数据未达到要求截至日时整批不可用，不沿用早期成功记录。单批不跨来源拼接；未知复权的备用数据即使通过结构校验也不进入费用参考计算。
+日线新增 `--source auto|eastmoney|sina`，默认 `auto`；新浪只适用 `515450.SH` 原始日线观察，受独立采集开关和用途限制控制。日线默认要求北京时间16点前的上一工作日、16点后的当日（周末退回工作日），不接受未结束的当日日线。此规则不是交易所日历，节假日可能保守拒绝；仅在独立核对最后完整交易日后使用 `--expected-last-date YYYY-MM-DD`。新采集数据未达到要求截至日时整批不可用，不沿用早期成功记录。单批不跨来源拼接；未知复权的备用数据即使通过结构校验也不进入费用参考计算。
 
 ```powershell
 py -3.12 -m goose_research --data-dir "$P1Data" report '替换为快照完整路径' --market '替换为600900日线记录完整路径' --market '替换为515450日线记录完整路径'
