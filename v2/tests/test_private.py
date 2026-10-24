@@ -59,7 +59,9 @@ class PrivateProviderTests(PrivateFiles, unittest.TestCase):
              patch.object(self.p1.model, 'build_view_model', wraps=self.p1.model.build_view_model) as model, \
              patch.object(self.p1.usage, 'market_usage', wraps=self.p1.usage.market_usage) as usage:
             view = self.view()
-        self.assertEqual([c.args[0] for c in read.call_args_list], [self.snapshot, *self.markets])
+        # Windows Temp may use RUNNER~1; P1 intentionally canonicalizes it.
+        self.assertEqual([c.args[0] for c in read.call_args_list],
+                         [f.resolve(strict=True) for f in [self.snapshot, *self.markets]])
         self.assertFalse(model.call_args.kwargs['demo']); self.assertEqual(usage.call_count, 2)
         self.assertFalse(view['test_data']); self.assertTrue(view['bundle_id'].startswith('private-'))
         a, b = view['accounts']
