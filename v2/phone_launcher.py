@@ -1,5 +1,7 @@
 """Windows owner panel. Device approvals and pairing secrets stay in memory."""
 import queue
+import os
+from pathlib import Path
 import threading
 
 from tailscale_transport import PhoneShare, TailnetError, Tailscale
@@ -16,24 +18,26 @@ MESSAGES = {
 }
 
 
-def main():
+def main(*, real=False):
     try:
         import tkinter as tk
         from tkinter import filedialog, messagebox, ttk
     except ImportError:
         print('无法打开控制窗口；请查看PHONE-HTTPS.md。'); return 1
-    app = tk.Tk(); app.title('养鹅计划 · iPhone安全连接 · 仅虚构测试')
-    app.geometry('730x580')
+    app = tk.Tk(); app.title('养鹅计划 · iPhone真实持仓只读' if real else '养鹅计划 · iPhone安全连接 · 仅虚构测试')
+    app.geometry('760x580')
     events = queue.Queue(); share = None; devices = {}; busy = False; closed = False
     device = tk.StringVar(); scenario = tk.StringVar(value='正常历史快照')
     status = tk.StringVar(value='先连接两端Tailscale，再刷新并选择本次唯一授权的iPhone。')
     url = tk.StringVar(value='尚未启动'); code = tk.StringVar(value='未生成')
+    chosen = {'code': None, 'snapshot': None, 'markets': []}
     scenarios = {'正常历史快照': 'normal', '缺少行情': 'missing', '数据过期': 'stale'}
     body = ttk.Frame(app, padding=22); body.pack(fill='both', expand=True)
-    ttk.Label(body, text='iPhone私网HTTPS · 仅虚构数据', font=('Microsoft YaHei', 17, 'bold')).pack(anchor='w')
-    ttk.Label(body, text='仅Tailscale Serve，不使用Funnel；不改防火墙、路由器或常驻任务。\n真实持仓入口保持关闭。配对码5分钟一次性有效，会话最长15分钟。', justify='left').pack(anchor='w', pady=12)
+    ttk.Label(body, text='iPhone私网HTTPS · 真实持仓只读' if real else 'iPhone私网HTTPS · 仅虚构数据', font=('Microsoft YaHei', 17, 'bold')).pack(anchor='w')
+    ttk.Label(body, text=('仅分享明确选择的P1文件，不修改、不上传；行情资格沿用P1。\n' if real else '仅虚构测试；真实文件入口关闭。\n') + '仅Tailscale私网HTTPS。配对码5分钟一次性有效，会话最长15分钟。', justify='left').pack(anchor='w', pady=12)
     picker = ttk.Combobox(body, textvariable=device, state='readonly', width=80); picker.pack(anchor='w', fill='x')
-    cases = ttk.Combobox(body, textvariable=scenario, values=list(scenarios), state='readonly'); cases.pack(anchor='w', pady=10)
+    cases = ttk.Combobox(body, textvariable=scenario, values=list(scenarios), state='readonly');
+    if not real: cases.pack(anchor='w', pady=10)
     ttk.Label(body, textvariable=status, wraplength=670, justify='left').pack(anchor='w', pady=12)
     ttk.Label(body, text='手机Safari访问地址（不含配对码）').pack(anchor='w')
     ttk.Entry(body, textvariable=url, state='readonly', width=85).pack(anchor='w', fill='x', pady=6)
@@ -46,7 +50,7 @@ def main():
         if busy or closed: return
         busy = True
         for button in buttons: button.configure(state='disabled')
-        status.set('正在检查私网状态，请稍候；只使用虚构数据。')
+        status.set('正在检查私网状态，请稍候。')
         def run():
             try: events.put((task, action(), None))
             except (ValueError, OSError): events.put((task, None, 'operation_failed'))
@@ -66,14 +70,18 @@ def main():
         if selected is None:
             status.set('请先刷新并选择在线iPhone；不会自动授权任何设备。'); return
         if share and share.server: return
-        if not messagebox.askyesno('本次设备授权', '仅允许下面这台设备访问虚构测试：\n' + selected.name + '\n' + ', '.join(selected.ips) + '\n请与iPhone的Tailscale设备信息核对。', parent=app): return
-        folder = filedialog.askdirectory(parent=app, title='选择已验收P1源码目录或其中p1目录，不是持仓目录')
+        if real and (not chosen['code'] or not chosen['snapshot']):
+            status.set('请先选择P1源码和已有持仓快照JSON；行情可留空。'); return
+        if not messagebox.askyesno('本次设备授权', ('仅允许下面这台设备只读查看选定真实持仓：\n' if real else '仅允许下面这台设备访问虚构测试：\n') + selected.name + '\n' + ', '.join(selected.ips) + '\n请与iPhone的Tailscale设备信息核对。', parent=app): return
+        folder = chosen['code'] if real else filedialog.askdirectory(parent=app, title='选择已验收P1源码目录或其中p1目录，不是持仓目录')
         if not folder: return
         selected_scenario = scenarios[scenario.get()]
         def launch():
             nonlocal share
             try:
                 share = PhoneShare()
+                if real:
+                    return share.start(folder, selected, snapshot_file=chosen['snapshot'], market_files=list(chosen['markets']))
                 return share.start(folder, selected, scenario=selected_scenario)
             except TailnetError as error: return ('error', str(error))
         work('start', launch)
@@ -87,15 +95,43 @@ def main():
     def stop():
         work('stop', lambda: True if share is None else share.stop())
 
+    def revoke():
+        work('revoke', lambda: True if share is None else share.stop())
+
     def copy_url():
         if share and share.server:
             app.clipboard_clear(); app.clipboard_append(url.get())
             status.set('已复制不含凭据的地址；可发送到自己的iPhone，用Safari打开。配对码另在本窗口查看。')
 
-    for title, callback in [('刷新设备', refresh), ('启动虚构HTTPS', start), ('撤销会话 / 新配对码', rotate), ('停止分享', stop)]:
+    if real:
+        initial = Path(os.environ.get('LOCALAPPDATA', Path.home())) / 'GooseResearchP1'
+        selections = ttk.Frame(body); selections.pack(anchor='w', fill='x', before=row)
+        labels = {key: tk.StringVar(value='尚未选择' if key != 'markets' else '可留空；不会补演示行情') for key in chosen}
+        def select(key):
+            if share and share.server:
+                status.set('请先停止分享，再更换选定文件。'); return
+            if key == 'code':
+                value = filedialog.askdirectory(parent=app, title='选择已验收PR #3源码目录或其中p1目录（不是数据目录）')
+            elif key == 'snapshot':
+                value = filedialog.askopenfilename(parent=app, title='选择P1 snapshots持仓快照JSON', initialdir=str(initial / 'snapshots'), filetypes=[('P1 JSON', '*.json')])
+            else:
+                value = filedialog.askopenfilenames(parent=app, title='选择market行情JSON；每个标的只选一份日线，可多选', initialdir=str(initial / 'market'), filetypes=[('P1 JSON', '*.json')])
+            if value:
+                chosen[key] = list(value) if key == 'markets' else value
+                labels[key].set(f'已选 {len(value)} 份行情' if key == 'markets' else Path(value).name)
+        for key, title in [('code', '1. 选择P1源码'), ('snapshot', '2. 选择持仓快照'), ('markets', '3. 选择行情（可多选）')]:
+            line = ttk.Frame(selections); line.pack(anchor='w', fill='x', pady=3)
+            button = ttk.Button(line, text=title, command=lambda key=key: select(key)); button.pack(side='left'); buttons.append(button)
+            ttk.Label(line, textvariable=labels[key], wraplength=480).pack(side='left', padx=10)
+        def clear_markets():
+            if not (share and share.server):
+                chosen['markets'] = []; labels['markets'].set('未选行情；不会补演示价格')
+        button = ttk.Button(selections, text='清空行情选择', command=clear_markets); button.pack(anchor='w'); buttons.append(button)
+    actions = [('刷新设备', refresh), ('启动分享', start), ('更新配对码', rotate), ('撤销授权', revoke), ('停止分享', stop)] if real else [('刷新设备', refresh), ('启动虚构HTTPS', start), ('撤销会话 / 新配对码', rotate), ('停止分享', stop)]
+    for title, callback in actions:
         button = ttk.Button(row, text=title, command=callback); button.pack(side='left', padx=(0, 8)); buttons.append(button)
     ttk.Button(body, text='复制手机地址', command=copy_url).pack(anchor='w')
-    ttk.Label(body, text='停止或关闭本窗口会清空会话、关闭本机接口及前台Serve进程。\n不要向他人发送配对码；手机四页一直标记“仅虚构测试”。', justify='left').pack(anchor='w', pady=12)
+    ttk.Label(body, text='撤销授权、停止或关闭窗口会清空会话及内存数据、关闭本次Serve。\n更新配对码也会撤销旧会话。手机不保存持仓；请勿分享配对码。' if real else '停止或关闭本窗口会清空会话、关闭本机接口及前台Serve进程。\n不要向他人发送配对码；手机四页一直标记“仅虚构测试”。', justify='left').pack(anchor='w', pady=12)
 
     def pump():
         nonlocal busy, devices
@@ -106,7 +142,7 @@ def main():
                 for button in buttons: button.configure(state='normal')
                 if error or isinstance(result, tuple) and result[0] == 'error':
                     key = result[1] if isinstance(result, tuple) else error
-                    status.set(MESSAGES.get(key, '操作未完成；没有读取真实数据。请检查Tailscale连接及P1源码版本。'))
+                    status.set(MESSAGES.get(key, '操作未完成。请检查Tailscale、P1源码及选定JSON（同一已确认本地数据目录、非Git/同步路径、格式有效）。未建立分享。' if real else '操作未完成；没有读取真实数据。请检查Tailscale连接及P1源码版本。'))
                 elif task == 'refresh':
                     devices = {f'{p.name} · {p.ips[0]} · {p.node_id[-6:]}': p for p in result}
                     picker.configure(values=list(devices)); device.set('')
@@ -114,13 +150,13 @@ def main():
                 elif task == 'start':
                     if share and share.server and share.gate.ready:
                         url.set(result); code.set(share.server.access.pair_code)
-                        status.set('虚构HTTPS已启动。用指定iPhone的Safari打开地址，输入配对码。')
+                        status.set(('真实持仓只读分享已启动。' if real else '虚构HTTPS已启动。') + '用指定iPhone的Safari打开地址，输入配对码。')
                     else:
                         url.set('已停止'); code.set('已撤销')
                         status.set('连接状态已改变，未保持分享。请重新检查Tailscale和设备状态。')
-                elif task == 'stop':
+                elif task in ('stop', 'revoke'):
                     url.set('已停止'); code.set('已撤销')
-                    status.set('已撤销会话、清空虚构数据并确认Serve关闭。' if result else '数据接口及会话已关闭，但未能确认Serve状态。请退出Windows Tailscale，并查看PHONE-HTTPS.md。')
+                    status.set('已撤销授权、清空内存数据并确认Serve关闭。' if result else '数据接口及会话已关闭，但未能确认Serve状态。请退出Windows Tailscale，并查看PHONE-HTTPS.md。')
         except queue.Empty:
             pass
         if not busy and share and share.error:
@@ -135,7 +171,7 @@ def main():
         if share: share.stop()
         app.destroy()
     app.protocol('WM_DELETE_WINDOW', close); app.after(150, pump)
-    app.update_idletasks(); app.geometry(f'730x{max(580, app.winfo_reqheight()+20)}')
+    app.update_idletasks(); app.geometry(f'760x{max(580, app.winfo_reqheight()+20)}')
     try: app.mainloop()
     finally:
         if share: share.stop()

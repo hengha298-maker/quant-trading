@@ -10,3 +10,17 @@ test('malformed cash quantities dates and duplicated accounts are rejected',()=>
 test('missing quote is unknown, not zero or a sample price',()=>{const d=fixture();Object.assign(d.quotes[0],{state:'missing',close:null,close_unit:null,as_of:null,fetched_at:null,source:null,lag_days:null});assert.equal(M.accept(d).quotes[0].close,null);d.quotes[0].close='1';assert.throws(()=>M.accept(d));});
 test('projection clone and explicit stale display threshold',()=>{const input=fixture(),copy=M.accept(input);copy.accounts[0].cash='2';assert.equal(input.accounts[0].cash,null);assert.equal(M.stale(input,Date.parse('2026-01-20T00:00:00Z')),true);assert.equal(M.stale(input,Date.parse('2026-01-06T00:00:00Z')),false);input.state='stale';assert.equal(M.stale(input,0),true);});
 module.exports={fixture};
+test('private mode accepts only explicit matching non-test batches and preserves exact quantities',()=>{
+ const d=fixture();d.test_data=false;d.bundle_id='private-0123456789abcdef';d.accounts[0].positions[0].quantity=7333;
+ assert.throws(()=>M.accept(d));
+ const accepted=M.accept(d,{testData:false});assert.equal(accepted.accounts[0].positions[0].quantity,7333);
+ assert.equal(accepted.accounts[0].positions[0].broker_cost,null);assert.equal(accepted.total_assets,null);
+ assert.throws(()=>M.accept(fixture(),{testData:false}));
+ d.test_data=true;assert.throws(()=>M.accept(d));assert.throws(()=>M.accept(d,{testData:false}));
+});
+test('real mode cannot promote observations or smuggle demo prices and computed assets',()=>{
+ for(const change of [d=>d.quotes[0].close_unit='CNY',d=>d.permissions.valuation=true,d=>d.total_assets='99',d=>d.demoPrice='1']){
+  const d=fixture();d.test_data=false;d.bundle_id='private-0123456789abcdef';change(d);
+  assert.throws(()=>M.accept(d,{testData:false}));
+ }
+});

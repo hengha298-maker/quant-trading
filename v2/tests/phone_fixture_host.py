@@ -15,8 +15,17 @@ from test_phone import AUTHORITY, DEVICE, FakeCLI, P1_CODE, bridge, phone
 
 
 def main():
-    backend = bridge.create_server(P1_CODE, port=0)
-    cli = FakeCLI(); gate = phone.TailnetGate(cli, DEVICE); gate.ready = True
+    cli = FakeCLI(); gate = phone.TailnetGate(cli, DEVICE)
+    selections = None
+    if os.environ.get('GOOSE_TEST_PRIVATE_FILES') == '1':
+        from test_private import PrivateFiles
+        import unittest
+        class SelectedFiles(PrivateFiles, unittest.TestCase): pass
+        selections = SelectedFiles(); selections.setup_files()
+        backend = bridge.create_private_server(P1_CODE, selections.snapshot, selections.markets, gate=gate, authority=AUTHORITY)
+    else:
+        backend = bridge.create_server(P1_CODE, port=0)
+    gate.ready = True
     backend.transport = gate; backend.secure_transport = True
     backend.authority = AUTHORITY; backend.origin = 'https://' + AUTHORITY
     backend.cookie_name = '__Host-goose_v2_fixture'
@@ -57,6 +66,11 @@ def main():
             if command == 'rotate': result = {'code': backend.access.rotate()}
             elif command == 'expire': backend.access.expires = 0; result = {'ok': True}
             elif command == 'deny': cli.who['Node']['StableID'] = 'nOther'; result = {'ok': True}
+            elif command == 'allow':
+                from test_phone import identity
+                cli.who = identity(); result = {'code': backend.access.rotate()}
+            elif command == 'disconnect':
+                gate.ready = False; backend.access.close(); backend.shutdown(); result = {'ok': True}
             elif command == 'stop': break
             else: raise ValueError('unsupported fixture operation')
             print(json.dumps(result), flush=True)
@@ -64,6 +78,7 @@ def main():
         gate.ready = False; backend.access.close()
         for server in (proxy, backend): server.shutdown(); server.server_close()
         for thread in threads: thread.join(timeout=3)
+        if selections: selections.doCleanups()
     return 0
 
 

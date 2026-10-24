@@ -1,4 +1,4 @@
-name: V2 readonly fixture integration
+name: V2 readonly P1 integration
 on: [push, pull_request]
 jobs:
   readonly:
@@ -29,6 +29,10 @@ jobs:
         env:
           GOOSE_P1_CODE: ${{ github.workspace }}/_p1_dependency
         run: python -m unittest discover -s v2/tests -p test_phone.py -v
+      - name: Explicit private JSON adapter and authenticated lifecycle (temporary fictional files only)
+        env:
+          GOOSE_P1_CODE: ${{ github.workspace }}/_p1_dependency
+        run: python -m unittest discover -s v2/tests -p test_private.py -v
       - name: Original demo cache
         run: node v2/tests/sw.test.cjs
       - name: Readonly contract and mode isolation

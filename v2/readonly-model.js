@@ -1,4 +1,4 @@
-/* Strict transport projection for the fixture-only real_readonly entry.
+/* Strict transport projection for explicitly separated private and fixture entries.
  * No demo import, no portfolio calculations, no persistence.
  */
 (function(root){
@@ -11,9 +11,10 @@
   const stamp=(v)=>{text(v);if(!/(Z|[+-]\d{2}:\d{2})$/.test(v)||!Number.isFinite(Date.parse(v)))fail();return v;};
   const number=(v,signed=false)=>{if(v===null)return null;if(typeof v!=='string'||v.length>40||!(signed?/^-?\d+(\.\d{1,12})?$/:/^\d+(\.\d{1,12})?$/).test(v)||!Number.isFinite(Number(v))||Math.abs(Number(v))>1e18)fail();return v;};
   const symbol=(s)=>{if(typeof s!=='string'||!/^\d{6}\.(SH|SZ)$/.test(s))fail();};
-  function accept(input){
+  function accept(input,{testData=true}={}){
+    if(typeof testData!=='boolean')fail();
     keys(input,['api_version','mode','test_data','p1_revision','bundle_id','snapshot_as_of','snapshot_at','generated_at','state','accounts','quotes','known_cash','unknown_cash_accounts','permissions','total_assets','strategies','reports']);
-    if(input.api_version!==1||input.mode!=='real_readonly'||input.test_data!==true||input.p1_revision!==REVISION||!/^fixture-[0-9a-f]{16}$/.test(input.bundle_id)||input.snapshot_at!==null||input.total_assets!==null||!['historical','stale'].includes(input.state))fail();
+    if(input.api_version!==1||input.mode!=='real_readonly'||input.test_data!==testData||input.p1_revision!==REVISION||!(testData?/^fixture-[0-9a-f]{16}$/:/^private-[0-9a-f]{16}$/).test(input.bundle_id)||input.snapshot_at!==null||input.total_assets!==null||!['historical','stale'].includes(input.state))fail();
     day(input.snapshot_as_of);stamp(input.generated_at);number(input.known_cash);
     keys(input.permissions,['valuation','profit_loss','advice']);if(Object.values(input.permissions).some(v=>v!==false))fail();
     if(!Array.isArray(input.accounts)||!input.accounts.length||input.accounts.length>100||!Array.isArray(input.quotes)||input.quotes.length>100)fail();

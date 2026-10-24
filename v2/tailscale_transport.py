@@ -1,4 +1,4 @@
-"""Fixture-only Tailscale Serve supervisor. No Funnel, files, ACL writes or login.
+"""Tailscale Serve supervisor. No Funnel, ACL writes or login.
 
 Trust boundary: the local Windows account/OS and installed Tailscale daemon are
 trusted. HTTP backend is loopback only, with a per-run private proxy prefix.
@@ -18,7 +18,7 @@ import subprocess
 import threading
 import time
 
-from readonly_server import create_server
+from readonly_server import create_server, create_private_server
 
 HTTPS_PORT = 8443
 
@@ -252,7 +252,7 @@ class PhoneShare:
         self.monitor = None; self.cancel = threading.Event(); self.lock = threading.RLock()
         self.error = None; self.stop_confirmed = True
 
-    def start(self, p1_code, device, *, scenario='normal'):
+    def start(self, p1_code, device, *, scenario='normal', snapshot_file=None, market_files=None):
         with self.lock:
             if self.server or self.process:
                 _fail('already_running')
@@ -262,13 +262,18 @@ class PhoneShare:
                 _fail('device_selection_expired')
             if not _empty_config(self.cli.config()):
                 _fail('existing_serve_or_funnel')
-            # Still calls the original fixture-only P1 gate. No file provider.
-            self.server = create_server(p1_code, port=0, scenario=scenario)
             self.gate = TailnetGate(self.cli, device)
+            if snapshot_file is None:
+                if market_files is not None:
+                    _fail('snapshot_required')
+                self.server = create_server(p1_code, port=0, scenario=scenario)
+            else:
+                self.server = create_private_server(p1_code, snapshot_file, market_files,
+                    gate=self.gate, authority=dns + ':' + str(HTTPS_PORT))
             self.server.transport = self.gate; self.server.secure_transport = True
             self.server.authority = dns + ':' + str(HTTPS_PORT)
             self.server.origin = 'https://' + self.server.authority
-            self.server.cookie_name = '__Host-goose_v2_fixture'
+            self.server.cookie_name = '__Host-goose_v2_private' if self.server.real_data else '__Host-goose_v2_fixture'
             self.url = self.server.origin + '/readonly/'
             self.target = f'http://127.0.0.1:{self.server.server_port}' + self.gate.prefix
             self.thread = threading.Thread(target=self.server.serve_forever, daemon=True); self.thread.start()
@@ -307,7 +312,7 @@ class PhoneShare:
             except (ValueError, OSError, AttributeError):
                 with self.lock:
                     if not cancel.is_set() and self.server is server:
-                        self.error = '连接或设备状态改变，已撤销会话并停止虚构分享。'
+                        self.error = '连接或设备状态改变，已撤销会话并停止分享。'
                         self.stop()
                 return
 

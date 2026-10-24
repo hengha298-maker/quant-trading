@@ -1,5 +1,7 @@
 # 养鹅计划 V2：手机优先只读原型
 
+> 当前真实只读入口：`iPhone真实持仓只读.cmd`。见[Windows/iPhone真实持仓说明](真实持仓手机使用说明.md)。原虚构入口继续保留；下文虚构阶段的“真实文件未接入”描述属于历史记录。真实模式独立使用 `private-` 批次、`test_data: false`，只允许指定设备私网HTTPS，禁止演示批次回填。
+
 ## 第二阶段：iPhone私网HTTPS虚构测试
 
 两端Tailscale连接后，双击 **`iPhone安全连接虚构测试.cmd`**，选择自己的iPhone并确认授权，启动Serve HTTPS及配对。仅虚构数据，不读取真实持仓，不使用Funnel、不开放公网。分步安装、连接与停止见 **[PHONE-HTTPS.md](PHONE-HTTPS.md)**。自动化测试不代替你的iPhone实际证书与连接验收。

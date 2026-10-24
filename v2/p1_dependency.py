@@ -12,6 +12,7 @@ FILES = {
     'validation.py': '4550cc31857f95fd55057059b35637866f828bf812f38ae79e59cd3e37dc9d5e',
     'usage.py': '8efc0c899c2e5f42269979d6c52b97992deb06bebf07f5542e60c2347e75d5e8',
     'report_model.py': 'c3e1ebbdc3751139ea15e4f1ea4345f25eb6fb8a4330a36c66de777c09cd8feb',
+    'storage.py': '2e2eb6ecc3738c61a66a36c842675d3eeafbb34e9ea3ec4c989de3b5a8b3ab26',
 }
 PACKAGE = '_goose_p1_f6c117f'
 LOCK = threading.RLock()
@@ -34,7 +35,7 @@ def load_p1(code_directory):
                 if len(raw)>200_000 or hashlib.sha256(raw.replace(b'\r\n',b'\n')).hexdigest()!=digest:
                     raise ValueError()
                 sources[name]=raw
-            # Relative imports resolve ONLY the four already verified modules.
+            # Relative imports resolve ONLY the five already verified modules.
             # Compile the checked buffers directly: stale/untrusted __pycache__
             # and an unrelated installed goose_research cannot be executed.
             modules = {}
@@ -47,6 +48,6 @@ def load_p1(code_directory):
                 exec(compile(raw,str(package/file),'exec'),module.__dict__)
                 modules[file]=module
             return SimpleNamespace(validation=modules['validation.py'],usage=modules['usage.py'],
-                                   model=modules['report_model.py'],revision=P1_COMMIT)
+                                   model=modules['report_model.py'],storage=modules['storage.py'],revision=P1_COMMIT)
     except (OSError,ValueError,ImportError,AttributeError,TypeError):
         raise ValueError('P1源码缺失或核心版本不匹配；请选择指定PR #3源码。不会降级或绕过校验。') from None

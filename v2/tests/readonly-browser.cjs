@@ -30,8 +30,8 @@ async function start(scenario='normal'){
   assert.match(await page.locator('main').innerText(),/原始历史收盘数值 · 单位未核验/);
   assert.match(await page.locator('main').innerText(),/1\.234/);assert.match(await page.locator('main').innerText(),/未知/);
   await page.getByRole('link',{name:'← 返回持仓'}).click();count++;
-  await context.setOffline(true);await page.getByRole('button',{name:'重新读取当前批次'}).click();
-  await page.getByRole('heading',{name:/连接已断开/}).waitFor();assert.ok(!(await page.locator('main').innerText()).includes('6,000'));count++;
+  await context.setOffline(true);
+  await page.getByRole('heading',{name:/网络已断开|连接已断开/}).waitFor();assert.ok(!(await page.locator('main').innerText()).includes('6,000'));count++;
   await context.setOffline(false);await page.getByRole('button',{name:'检查连接 / 重试'}).click();await page.getByText('我的持仓',{exact:true}).first().waitFor();
   await page.route('**/api/v1/view',async route=>{const res=await route.fetch();const payload=await res.json();payload.mode='demo';payload.secret='PRIVATE_CANARY';await route.fulfill({status:200,body:JSON.stringify(payload),contentType:'application/json'});});
   await page.getByRole('button',{name:'重新读取当前批次'}).click();await page.getByRole('heading',{name:/数据协议不匹配/}).waitFor();
@@ -46,7 +46,7 @@ async function start(scenario='normal'){
    await c.page.screenshot({path:path.join(OUT,'desktop-'+scenario+'.png')});count++;await c.context.close();
   }
   const dead=await start();servers.push(dead);const d=await visit(dead);await pair(d.page,dead.code);dead.stop();
-  await d.page.getByRole('button',{name:'重新读取当前批次'}).click();await d.page.getByRole('heading',{name:/连接已断开/}).waitFor();assert.ok(!(await d.page.locator('main').innerText()).includes('2,500'));count++;await d.context.close();
+  await d.page.getByRole('button',{name:'重新读取当前批次'}).click();await d.page.getByRole('heading',{name:/网络已断开|连接已断开/}).waitFor();assert.ok(!(await d.page.locator('main').innerText()).includes('2,500'));count++;await d.context.close();
   const revoked=await start();servers.push(revoked);const rv=await visit(revoked);await pair(rv.page,revoked.code);
   assert.equal((await rv.context.request.post(revoked.origin+'/session/logout',{headers:{Origin:revoked.origin},data:{}})).status(),200);
   await rv.page.getByRole('heading',{name:/未授权：会话可能已过期或撤销/}).waitFor({timeout:20000});

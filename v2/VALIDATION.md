@@ -1,65 +1,37 @@
-# V2 原型验证记录
+# V2 真实持仓只读验证
 
-验证日期：北京时间 2026-10-21。基线 main 为 `16dde078c3666adb7a8b9be09316c28fd5a1d0a3`，包含 PR #4 的 Bark 历史修复。本次只在独立 `v2/` 新增原型；测试、截图和数据均为公开虚构样例。
+基线为 PR #5 `d3ad1bf`，P1 依赖为 PR #3 `f6c117f`。没有访问用户真实持仓或 tailnet。
 
-## 自动检查
+## 本次本地结果
 
-| 检查 | 实际结果 |
-| --- | --- |
-| 原 V1.1 回归 | 79 项通过 |
-| V2 Python 预览服务 | 9 项通过 |
-| 根目录完整 pytest | 88 项通过（79 + 9），没有真实行情请求或通知 |
-| JavaScript 展示模型 | 11 项通过 |
-| Service Worker | 5 项通过 |
-| 浏览器交互、响应式与离线检查 | 13 组通过、0 失败、1 环境跳过；明细见 `docs/browser-results.json` |
-| 原锁定依赖的 `pip check` | 通过 |
+- 完整 pytest：142 通过，4 项 Windows 原生专项在 Linux 跳过。包含原 V1.1/Bark 回归和全部 P1 源码依赖测试。
+- 新增 test_private.py：18 项，Linux 17 通过/1 项 Windows 原生真实启动窗口跳过；专用 CI 在 Windows 运行该项。临时虚构 JSON 验证选定读取、原文件哈希不变、未知与零、原 P1 函数复用、OHLC/未来日期/JSON重复键及NaN拒绝、缺失和歧义行情、路径/大小限制、无演示导入、真实接口设备绑定及停止清理。
+- 原 test_readonly.py、test_phone.py、test_preview.py 全部保留；错码/重放/短会话/盗Cookie/错设备/HTTP降级/Funnel/配置改变/停止等测试同样覆盖新增真实文件模式。
+- JS 模型、SW 和只读协议共25项通过，包含新增真实/虚构批次互斥和权限不可提升检查；没有修改原演示计算或缓存逻辑。
+- 临时JSON真实模式 TLS 浏览器：14组通过；原虚构 TLS 浏览器：13组通过；原本机只读浏览器：13组通过。真实模式验证精确数量/成本、四页、来源及单位限制、空浏览器存储、Secure/HttpOnly Cookie、8秒超时及迟到响应、401/403/撤销/断网/服务关闭清屏。全部0演示脚本请求、0页面异常。
+- diff与提交范围检查通过；只包含 v2 和独立 V2 CI，没有持仓JSON、数据目录、报告或密钥。原 P1 和原 V1.1/Bark 文件未修改。
 
-Python 测试使用独立 `work/validation-venv`，按原 `requirements.lock` 安装，未改原锁版本或系统 Python 环境。Python 为 3.12.14；JavaScript 检查使用 Node.js 24.19.0、Playwright 1.62.1 和环境已有 Chromium。普通用户预览不需要这些浏览器开发工具。一次性排版使用 Prettier 3.6.2，未增加项目运行依赖；排版后模型、SW 与语法检查再次通过。
+浏览器 TLS 仅为本机临时自签名替身：忽略证书错误只存在于隔离测试浏览器，正式启动器没有此选项。未启动真实 Tailscale Serve、未登录私人网络、未进行实际 iPhone Safari 验收。没有将跳过算作通过。
 
-可复现命令：
+## 可复现检查
 
-```text
+开发者提供固定 P1 **源码**目录：
+
+```powershell
+$env:GOOSE_P1_CODE = "PR3源码目录"
+py -3.12 -m unittest discover -s v2/tests -v
 node v2/tests/model.test.cjs
 node v2/tests/sw.test.cjs
-python -m unittest discover -s v2/tests -p test_preview.py -v
-python -m pytest -q
-python -m pip check
+node v2/tests/readonly-model.test.cjs
 ```
 
-最后两项应在安装了原锁定测试依赖的独立环境中执行。预览服务与浏览器测试需要允许本机监听 socket；本次在沙箱的受支持网络权限下运行。页面运行没有第三方包安装步骤。
+已有 Playwright/Chromium 的开发环境还可运行：
 
-### Windows 首轮 CI 与测试夹具修正
+```powershell
+$env:GOOSE_TEST_PRIVATE_FILES = "1"
+node v2/tests/phone-browser.cjs
+```
 
-Draft PR #5 首轮提交 `42375d8` 的 Windows CI 中，原 V1.1 的 79 项回归通过；完整检查为 85 项通过、3 项失败。失败均为预览服务正常资源的 GET、HEAD 与响应头检查返回 404。测试夹具把 Windows 临时目录直接赋给 `PUBLIC_ROOT`，临时路径可能包含 `RUNNER~1` 一类 8.3 短路径；资源严格解析为长路径后，与未规范化的夹具路径比较不一致。生产代码的根目录本身已经使用 `Path(__file__).resolve().parent`。
+该变量只选择**测试脚本**内临时虚构文件，不是正式启动器的真实数据开关。普通用户不需要安装Node/Playwright或重跑以上测试。
 
-本轮仅在测试创建临时目录后，将夹具根目录严格解析为已有的真实路径，使其与生产初始化一致。未修改服务白名单、资源路径比较或符号链接拒绝规则，亦未跳过任何断言。非法路径和符号链接泄漏测试继续执行。修正后的 Linux 本地预览服务 9 项及完整 pytest 88 项均重新通过；修正提交的 Windows 远端结果以随后 PR Checks 为准，不用本地结果代替 Windows 验收。
-
-可选浏览器验证先启动 `python v2/preview.py --no-open`，再在装有 Playwright 的开发环境运行 `node v2/tests/browser.cjs`。可用 `V2_CHROMIUM` 指定已有 Chromium 路径；`V2_BASE_URL`、`V2_SCREENSHOT_DIR` 可指定本地预览地址与截图输出目录。开发者应遵守所在环境的浏览器权限，不绕过管理策略。
-
-## 已验证的行为
-
-- 手机尺寸 375、390、430 像素与桌面 1440 像素下，四页无横向溢出。
-- 导航、证券及策略详情、报告详情、返回、账户筛选、报告筛选、展开说明、金额隐藏均可交互。
-- 数据状态、功能预留、添加主屏幕说明弹窗可打开与关闭；未发送外部请求。
-- 未知现金和成本不变成零；部分数据不冒充全账户资产；每份 ETF 成本 `1.046` 不舍入为现金格式的 `1.05`。
-- 日期快照不生成日内时刻；P1 历史映射被演示入口拒绝；两策略均不可执行。
-- 本机 Service Worker 缓存安装后，可以断网刷新带 hash 路由的页面并继续导航。
-- manifest、192/512 图标与本地图标资源可加载；无 JavaScript 异常、SVG 渲染或 CSP 错误。
-- 预览器只提供固定资源：目录、测试、配置、数据库、查询路径和符号链接泄漏均被拒绝；写请求不可用。
-- SW 不缓存 API、未来私有报告、查询参数、外部站点或写请求，仅清理自己 scope 的旧缓存。
-
-本轮在实际浏览器中发现并修复了带 hash 导航的离线刷新缓存未命中、部分 SVG 路径拼接错误、ETF 成本小数显示和跳到内容链接与路由冲突，并补充对应复验。
-
-## 不能据此宣称的能力
-
-- 浏览器是 Linux Chromium 的手机尺寸／触控模拟，不是实体 iPhone Safari，也不是 Windows 实机。中文启动脚本未在实体 Windows 上执行。
-- 当前受管理 Chromium 拒绝 `file://`，因此直接双击 HTML 的浏览器检查属于环境跳过，未通过实测；推荐已验证的本地 HTTP 入口。
-- 手机局域网 HTTP 的完整离线 PWA、实际主屏幕安装仍待可信 HTTPS 与实体 iPhone 验收。本期没有部署 HTTPS、安装证书或云服务。
-- 没有真实持仓、行情、财务、费用、策略收益、券商委托、Bark 到达或云同步验收。
-- 虚构演示缓存不适用于未来真实账户；后续接入必须重新设计认证与私人数据缓存。
-
-## 隔离与回滚
-
-提交只新增 `v2/`，原 `src/`、`scripts/`、依赖锁文件、配置模板、测试及数据库没有修改。未改计划任务或原 Bark 行为，未调用原交易入口，未改或合并 Draft PR #3。
-
-停止使用只需关闭本地预览窗口；回退本分支或删除独立 V2 副本，不处理 V1 数据库。需要清除离线演示时，在浏览器清除该预览地址的网站数据；其中只有公开虚构数据。
+Windows/Linux GitHub Actions 专用 V2 工作流固定检出 P1，执行原接口测试、手机传输测试、新增文件适配测试及 JS 回归。主项目回归工作流保留。

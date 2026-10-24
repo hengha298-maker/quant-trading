@@ -1,7 +1,7 @@
-"""Authenticated FICTIONAL ONLY bridge; real file inputs remain absent.
+"""Authenticated read-only bridge; private input requires a TailnetGate.
 
 The original loopback harness and the separately supervised Tailscale transport
-share authentication, fixed assets, P1 validation and the same fixture provider.
+share authentication and fixed assets. Private data has a separate constructor.
 """
 import argparse
 from copy import deepcopy
@@ -18,7 +18,6 @@ import time
 import webbrowser
 
 from p1_dependency import load_p1
-from readonly_fixture import build_fixture_view, SCENARIOS
 
 REAL_DATA_ENABLED = False
 ROOT = Path(__file__).resolve().parent
@@ -98,7 +97,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(status)
         for key,value in [('Content-Type',mime),('Content-Length',str(len(body))),('Cache-Control','no-store, max-age=0'),
             ('Pragma','no-cache'),('X-Content-Type-Options','nosniff'),('Referrer-Policy','no-referrer'),
-            ('X-Frame-Options','DENY'),('X-Goose-Test-Only','true'),
+            ('X-Frame-Options','DENY'),('X-Goose-Test-Only','false' if self.server.real_data else 'true'),
             ('Content-Security-Policy',"default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; worker-src 'none'; manifest-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'")]:
             self.send_header(key,value)
         if cookie:
@@ -110,6 +109,8 @@ class Handler(BaseHTTPRequestHandler):
             self.wfile.write(body)
     def _guard(self, post=False):
         self.device_binding = None
+        if self.server.real_data and (not self.server.secure_transport or self.server.transport is None):
+            self._send(403,dict(error='secure_transport_required')); return False
         if self.server.transport is not None:
             try:
                 self.device_binding = self.server.transport.verify(self)
@@ -149,6 +150,8 @@ class Handler(BaseHTTPRequestHandler):
             if path.resolve(strict=True) != path.absolute() or not path.is_file():
                 raise ValueError()
             content = path.read_bytes()
+            if name == 'readonly.html' and self.server.real_data:
+                content = content.replace(b'data-private="false"', b'data-private="true"')
             self._send(200,content,mime)
         except (ValueError,OSError):
             self._send(404,dict(error='not_found'))
@@ -180,7 +183,7 @@ class Handler(BaseHTTPRequestHandler):
             if token is None:
                 self._send(401,dict(error='pair_denied'));return
             secure='; Secure' if self.server.secure_transport else ''
-            self._send(200,dict(status='paired',test_data=True),cookie=f'{self.server.cookie_name}={token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=900{secure}')
+            self._send(200,dict(status='paired',test_data=not self.server.real_data),cookie=f'{self.server.cookie_name}={token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=900{secure}')
         else:
             if body or not self.server.access.authorized(self._token(),self.device_binding):
                 self._send(401,dict(error='unauthorized'));return
@@ -205,7 +208,8 @@ class FixtureServer(ThreadingHTTPServer):
 
 def create_server(p1_code, *, port=9876, scenario='normal'):
     if REAL_DATA_ENABLED is not False:
-        raise ValueError('Real data transport is not implemented; refusing HTTP')
+        raise ValueError('Private files are forbidden on fixture HTTP; use the private HTTPS launcher')
+    from readonly_fixture import build_fixture_view
     p1=load_p1(p1_code)
     view=build_fixture_view(p1,scenario)
     if view['test_data'] is not True or view['mode']!='real_readonly':
@@ -214,6 +218,7 @@ def create_server(p1_code, *, port=9876, scenario='normal'):
         raise ValueError('Fixture projection too large')
     server=FixtureServer(('127.0.0.1',port),Handler)
     server.access=Access(view)
+    server.real_data=False
     server.transport=None
     server.secure_transport=False
     server.authority=f'127.0.0.1:{server.server_port}'
@@ -222,7 +227,27 @@ def create_server(p1_code, *, port=9876, scenario='normal'):
     return server
 
 
+def create_private_server(p1_code, snapshot_file, market_files, *, gate, authority):
+    # A caller cannot expose private selections using the loopback fixture API.
+    from tailscale_transport import TailnetGate, HTTPS_PORT
+    from readonly_private import build_private_view
+    if type(gate) is not TailnetGate or gate.ready or not re.fullmatch(
+            r'[a-z0-9][a-z0-9-]*\.[a-z0-9][a-z0-9-]*\.ts\.net:' + str(HTTPS_PORT), authority):
+        raise ValueError('真实模式必须由指定设备私网HTTPS启动器建立。')
+    view = build_private_view(load_p1(p1_code), snapshot_file, market_files)
+    server = FixtureServer(('127.0.0.1', 0), Handler)
+    server.access = Access(view)
+    server.real_data = True
+    server.transport = gate
+    server.secure_transport = True
+    server.authority = authority
+    server.origin = 'https://' + authority
+    server.cookie_name = '__Host-goose_v2_private'
+    return server
+
+
 def main(argv=None):
+    from readonly_fixture import SCENARIOS
     if hasattr(sys.stdout,'reconfigure'):sys.stdout.reconfigure(encoding='utf-8',errors='replace')
     parser=argparse.ArgumentParser(description='仅虚构数据、本机、需配对的real_readonly开发测试；不支持真实持仓或LAN')
     parser.add_argument('--p1-code',required=True,help='指定版本PR #3源码目录或其中p1目录，绝非数据目录')
