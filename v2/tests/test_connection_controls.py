@@ -1,6 +1,7 @@
 """Windows owner-panel connection check controls; no P1 files or network."""
 import os
 from pathlib import Path
+import subprocess
 import sys
 import threading
 import time
@@ -16,6 +17,29 @@ from test_phone import AUTHORITY, FakeCLI
 
 @unittest.skipUnless(os.name == 'nt', 'Windows native connection diagnostic controls')
 class ConnectionControlTests(unittest.TestCase):
+    def _callTestMethod(self, method):
+        # Quantitative/optional native libraries imported earlier by pytest can
+        # affect Tcl initialization in the shared process. Each case still runs
+        # its full native GUI scenario, in a fresh Python rather than skipping.
+        flag = 'GOOSE_CONNECTION_GUI_CHILD'
+        case = self._testMethodName
+        if os.environ.get(flag) == case:
+            return super()._callTestMethod(method)
+        environment = os.environ.copy(); environment[flag] = case
+        try:
+            result = subprocess.run(
+                [sys.executable, '-X', 'utf8', '-m', 'unittest',
+                 f'test_connection_controls.ConnectionControlTests.{case}', '-v'],
+                cwd=Path(__file__).resolve().parent, env=environment,
+                capture_output=True, text=True, encoding='utf-8', errors='replace',
+                timeout=40)
+        except subprocess.TimeoutExpired:
+            self.fail('Native connection-control GUI child exceeded 40 seconds')
+        details = result.stdout + result.stderr
+        self.assertEqual(result.returncode, 0, 'Native GUI child failed:\n' + details)
+        self.assertIn('Ran 1 test', result.stderr, 'Native GUI case was not executed:\n' + details)
+        self.assertNotIn('skipped=', result.stderr, 'Native GUI case must execute, not skip:\n' + details)
+
     def run_panel(self, scenario, *, results=None):
         import tkinter as tk
         from tkinter import ttk
