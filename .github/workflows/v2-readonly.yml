@@ -39,6 +39,16 @@ jobs:
         env:
           GOOSE_P1_CODE: ${{ github.workspace }}/_p1_dependency
         run: python -m unittest discover -s v2/tests -p test_transport_monitor.py -v
+      - name: Versioned whois 1.104.2 expiry serialization contract
+        run: python -m unittest discover -s v2/tests -p test_whois_1042.py -v
+      - name: Private self HTTPS checks and bounded fixed-code observations
+        run: python -m unittest discover -s v2/tests -p test_connection_diagnostics.py -v
+      - name: Actual HTTP request observation and device guards
+        env:
+          GOOSE_P1_CODE: ${{ github.workspace }}/_p1_dependency
+        run: python -m unittest discover -s v2/tests -p test_request_diagnostics.py -v
+      - name: Windows diagnostic controls preserve selections and stopping
+        run: python -m unittest discover -s v2/tests -p test_connection_controls.py -v
       - name: Original demo cache
         run: node v2/tests/sw.test.cjs
       - name: Readonly contract and mode isolation

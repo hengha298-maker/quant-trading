@@ -91,6 +91,10 @@ class Handler(BaseHTTPRequestHandler):
         self.connection.settimeout(5)
     def log_message(self, *_args):
         pass  # No paths, cookies, codes, request bodies or account data in logs.
+    def _trace(self, code):
+        transport = self.server.transport
+        if transport is not None and hasattr(transport, 'trace'):
+            transport.trace.record(getattr(self, 'trace_ticket', None), code)
     def _send(self, status, body, mime='application/json; charset=utf-8', cookie=None):
         if isinstance(body, dict):
             body = json.dumps(body, ensure_ascii=True, allow_nan=False, separators=(',', ':')).encode('ascii')
@@ -106,7 +110,13 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header('Strict-Transport-Security','max-age=86400')
         self.end_headers()
         if self.command != 'HEAD':
-            self.wfile.write(body)
+            try:
+                self.wfile.write(body)
+            except OSError:
+                self._trace('phone_reply_failed')
+                raise
+            if status == 200 and self.path == '/readonly/' and getattr(self, 'device_binding', None):
+                self._trace('phone_page_sent')
     def _guard(self, post=False):
         self.device_binding = None
         if self.server.real_data and (not self.server.secure_transport or self.server.transport is None):
@@ -119,8 +129,10 @@ class Handler(BaseHTTPRequestHandler):
         hosts = self.headers.get_all('Host', [])
         origin = self.headers.get_all('Origin', [])
         if hosts != [self.server.authority] or self.path not in set(ASSETS)|{'/api/v1/view','/session/pair','/session/logout'}:
+            self._trace('phone_host_route_rejected')
             self._send(404,dict(error='not_found')); return False
         if self.headers.get('Sec-Fetch-Site') == 'cross-site' or (origin and origin != [self.server.origin]) or (post and origin != [self.server.origin]):
+            self._trace('phone_origin_rejected')
             self._send(403,dict(error='origin_denied')); return False
         return True
     def _token(self):

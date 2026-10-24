@@ -56,6 +56,35 @@ def refreshed_choice(previous, devices):
     return ''
 
 
+def connection_message(codes):
+    explanations = {
+        'check_whois_ok': '电脑已成功复核指定iPhone身份。',
+        'check_whois_failed': '电脑的whois复核失败；后续固定码说明原因。',
+        'check_local_https_ok': 'Windows访问自身HTTPS及应用403正常；不代表手机方向已通。',
+        'phone_request_not_observed': '本轮未观察到授权地址的请求；尚不能区分手机DNS、TCP/TLS或VPN/代理。',
+        'phone_candidate_arrived': '选定IP的候选请求已到应用，仍需身份核验。',
+        'phone_identity_verified': '请求已通过指定设备完整身份核验。',
+        'phone_page_sent': '配对页已写入Serve，不证明Safari已收到；需查返回路径及手机VPN/代理。',
+        'phone_identity_rejected': '到达应用的候选请求未通过设备身份核验。',
+        'phone_whois_timeout': '请求到达应用，但whois超时。',
+        'phone_proxy_headers_rejected': '候选请求的代理头或安全入口不匹配。',
+        'check_cancelled': '诊断已随停止分享取消。',
+        'check_local_dns_failed': 'Windows本机域名解析失败。',
+        'check_local_dns_mismatch': 'Windows解析结果不属于本机Tailscale地址，已停止探测。',
+        'check_local_tcp_failed': 'Windows访问自身8443失败；还不能判断手机方向。',
+        'check_local_tls_failed': 'Windows本机TLS握手或证书验证失败，没有降级。',
+        'check_local_http_failed': '本机TLS后的HTTP结果不符合应用预期。',
+    }
+    safe = tuple(diagnostic_code(code) for code in codes)
+    priority = ('check_cancelled', 'phone_whois_timeout', 'phone_identity_rejected',
+                'phone_proxy_headers_rejected', 'phone_page_sent', 'phone_identity_verified',
+                'phone_request_not_observed', 'phone_candidate_arrived')
+    local = next((code for code in safe if code.startswith('check_local_')), None)
+    phone = next((code for code in priority if code in safe), None)
+    selected = tuple(dict.fromkeys(code for code in (local, phone) if code))
+    return '\n'.join(f'[{code}] {explanations.get(code, "对应检查结果已记录。")}' for code in selected) + '\n完整固定码可复制；文件选择未变。'
+
+
 def main(*, real=False):
     try:
         import tkinter as tk
@@ -64,7 +93,7 @@ def main(*, real=False):
         print('无法打开控制窗口；请查看PHONE-HTTPS.md。'); return 1
     app = tk.Tk(); app.title('养鹅计划 · iPhone真实持仓只读' if real else '养鹅计划 · iPhone安全连接 · 仅虚构测试')
     app.geometry('760x580')
-    events = queue.Queue(); share = None; devices = {}; busy = False; closed = False
+    events = queue.Queue(); share = None; devices = {}; busy = False; closed = False; checking = False
     device = tk.StringVar(); scenario = tk.StringVar(value='正常历史快照')
     status = tk.StringVar(value='先连接两端Tailscale，再刷新并选择本次唯一授权的iPhone。')
     url = tk.StringVar(value='尚未启动'); code = tk.StringVar(value='未生成')
@@ -145,7 +174,19 @@ def main(*, real=False):
 
     def copy_diagnostic():
         if diagnostic.get():
-            app.clipboard_clear(); app.clipboard_append(diagnostic_code(diagnostic.get()))
+            app.clipboard_clear(); app.clipboard_append('\n'.join(diagnostic_code(code) for code in diagnostic.get().splitlines()))
+
+    def check_connection():
+        nonlocal checking
+        if checking or busy or not share or not share.server:
+            return
+        checking = True; owner = share
+        status.set('正在自动检查whois、本机DNS/TCP/HTTPS。请在iPhone Safari刷新一次；停止按钮仍可使用。')
+        def run():
+            try: result = owner.check_connection()
+            except Exception: result = ('transport_internal_error',)
+            events.put(('connection', (owner, result), None))
+        threading.Thread(target=run, daemon=True).start()
 
     if real:
         initial = Path(os.environ.get('LOCALAPPDATA', Path.home())) / 'GooseResearchP1'
@@ -176,14 +217,23 @@ def main(*, real=False):
         button = ttk.Button(row, text=title, command=callback); button.pack(side='left', padx=(0, 8)); buttons.append(button)
     ttk.Button(body, text='复制手机地址', command=copy_url).pack(anchor='w')
     ttk.Button(body, text='复制诊断码（仅固定代码）', command=copy_diagnostic).pack(anchor='w')
+    ttk.Button(body, text='检查手机连接（同时刷新Safari）', command=check_connection).pack(anchor='w')
     ttk.Label(body, text='撤销授权、停止或关闭窗口会清空会话及内存数据、关闭本次Serve。\n更新配对码也会撤销旧会话。手机不保存持仓；请勿分享配对码。' if real else '停止或关闭本窗口会清空会话、关闭本机接口及前台Serve进程。\n不要向他人发送配对码；手机四页一直标记“仅虚构测试”。', justify='left').pack(anchor='w', pady=12)
 
     def pump():
-        nonlocal busy, devices
+        nonlocal busy, devices, checking
         if closed: return
         try:
             while True:
-                task, result, error = events.get_nowait(); busy = False
+                task, result, error = events.get_nowait()
+                if task == 'connection':
+                    checking = False
+                    owner, codes = result
+                    if share is owner and owner.server and not busy:
+                        safe = tuple(diagnostic_code(code) for code in codes)
+                        diagnostic.set('\n'.join(safe)); status.set(connection_message(safe))
+                    continue
+                busy = False
                 for button in buttons: button.configure(state='normal')
                 if error or isinstance(result, tuple) and result[0] == 'error':
                     key = result[1] if isinstance(result, tuple) else error

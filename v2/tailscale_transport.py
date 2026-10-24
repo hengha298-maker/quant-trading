@@ -19,6 +19,7 @@ import threading
 import time
 
 from readonly_server import create_server, create_private_server
+from connection_diagnostics import CONNECTION_CODES, RequestTrace, check_local_https
 
 HTTPS_PORT = 8443
 
@@ -36,7 +37,7 @@ serve_failed serve_config_missing serve_configuration_changed
 serve_session_changed device_unavailable device_identity_changed
 device_addresses_changed device_offline device_not_ios device_key_expired
 device_tagged_or_shared tailnet_dns_changed not_running stop_unconfirmed
-watch_internal_error'''.split()) | frozenset(
+watch_internal_error'''.split()) | CONNECTION_CODES | frozenset(
     f'cli_{operation}_{reason}'
     for operation in ('version', 'status', 'config', 'whois', 'other')
     for reason in ('timeout', 'launch', 'exit', 'size', 'encoding', 'json'))
@@ -204,6 +205,10 @@ class Tailscale:
             if ips:
                 devices.append(Device(node_id, user_id, login,
                     str(peer.get('HostName', 'iPhone'))[:80], ips))
+        # Cache only after the version AND complete live status were verified.
+        # This is the CLI that serializes whois JSON, not just daemon metadata.
+        self.verified_version = tuple(map(int, match.groups()))
+        self.self_ips = tuple(tail_ip(ip) for ip in own.get('TailscaleIPs', []))
         return dns, devices
 
     def config(self):
@@ -277,8 +282,31 @@ class TailnetGate:
         self.device = device
         self.prefix = '/_goose_bridge_' + secrets.token_urlsafe(32)
         self.ready = False
+        self.trace = RequestTrace()
 
     def verify(self, handler):
+        # A candidate is not an authenticated device. Attribute only the
+        # selected address through this run's private loopback proxy path.
+        # Windows' self HTTPS probe has a different source and is not counted.
+        values = handler.headers.get_all('X-Forwarded-For', [])
+        candidate = (handler.client_address[0] == '127.0.0.1' and
+                     handler.path.startswith(self.prefix + '/') and
+                     len(values) == 1 and values[0] in self.device.ips)
+        handler.trace_ticket = self.trace.candidate() if candidate else None
+        try:
+            result = self._verify_request(handler)
+        except TailnetError as error:
+            if error.code == 'cli_whois_timeout': code = 'phone_whois_timeout'
+            elif error.code in ('cli_whois_json', 'cli_whois_encoding', 'identity_unavailable'): code = 'phone_whois_json_failed'
+            elif error.code.startswith('cli_whois_'): code = 'phone_whois_cli_failed'
+            elif error.code == 'device_denied': code = 'phone_identity_rejected'
+            else: code = 'phone_proxy_headers_rejected'
+            self.trace.record(handler.trace_ticket, code)
+            raise
+        self.trace.record(handler.trace_ticket, 'phone_identity_verified')
+        return result
+
+    def _verify_request(self, handler):
         def header(name):
             values = handler.headers.get_all(name, [])
             if len(values) != 1:
@@ -294,20 +322,41 @@ class TailnetGate:
         ip = tail_ip(header('X-Forwarded-For'))  # Single, overwritten Serve value; no chains.
         if ip not in self.device.ips or header('Tailscale-User-Login') != self.device.login:
             _fail('device_denied')
+        self.trace.record(handler.trace_ticket, 'phone_proxy_headers_ok')
+        self.trace.record(handler.trace_ticket, 'phone_whois_started')
+        binding = self.verify_identity(ip)
+        handler.path = handler.path[len(self.prefix):]
+        return binding
+
+    def verify_identity(self, ip):
+        """Revalidate the exact approved node; no proxy/header bypass.
+
+        Tailscale 1.104.2's whois CLI encodes Node.KeyExpiry with omitzero.
+        A missing field therefore represents disabled expiry ONLY for that
+        verified CLI version. Explicit null is not the documented encoding.
+        """
+        ip = tail_ip(ip)
+        if ip not in self.device.ips:
+            _fail('device_denied')
         try:
             who = self.cli.whois(ip)
             node = who['Node']; user = who['UserProfile']
             addresses = [ipaddress.ip_network(a, strict=False) for a in node['Addresses']]
+            if 'KeyExpiry' in node:
+                expiry_valid = isinstance(node['KeyExpiry'], str) and _not_expired(node['KeyExpiry'])
+            else:
+                expiry_valid = getattr(self.cli, 'verified_version', None) == (1, 104, 2)
             if (node.get('StableID') != self.device.node_id or type(node.get('User')) is not int or
                 node.get('User') != self.device.user_id or user.get('ID') != self.device.user_id or
                 user.get('LoginName') != self.device.login or node.get('Tags') or
                 node.get('MachineAuthorized') is not True or node.get('Expired', False) is not False or
-                not isinstance(node.get('KeyExpiry'), str) or not _not_expired(node['KeyExpiry']) or
+                not expiry_valid or
                 not any(ipaddress.ip_address(ip) in n and n.prefixlen == n.max_prefixlen for n in addresses)):
                 _fail('device_denied')
-        except (KeyError, TypeError, AttributeError):
+        except TailnetError:
+            raise
+        except (KeyError, TypeError, AttributeError, ValueError):
             _fail('identity_unavailable')
-        handler.path = handler.path[len(self.prefix):]
         return self.device.node_id
 
 
@@ -454,10 +503,38 @@ class PhoneShare:
                 _fail('not_running')
             return self.server.access.rotate()
 
+    def check_connection(self):
+        """Owner-only checks, while sharing. No selected files are reopened."""
+        with self.lock:
+            if not self.server or not self.gate.ready:
+                return ('check_not_running',)
+            gate = self.gate; server = self.server; cancel = self.cancel
+            ticket = gate.trace.begin()
+            authority = server.authority
+            self_ips = getattr(self.cli, 'self_ips', ())
+        codes = []
+        try:
+            gate.verify_identity(gate.device.ips[0])
+            codes.append('check_whois_ok')
+        except (ValueError, OSError) as error:
+            codes.extend(('check_whois_failed', error.code if isinstance(error, TailnetError) else 'identity_unavailable'))
+        if not cancel.is_set():
+            codes.extend(check_local_https(authority, self_ips))
+        # The browser can be refreshed during this window. Stops remain usable;
+        # cancellation prevents observations/results from an old share leaking
+        # into a newly started share.
+        cancel.wait(10)
+        if cancel.is_set():
+            gate.trace.cancel()
+            return ('check_cancelled',)
+        codes.extend(gate.trace.finish(ticket))
+        return tuple(dict.fromkeys(diagnostic_code(code) for code in codes))
+
     def stop(self):
         with self.lock:
             self.cancel.set()
             if self.server:
+                self.gate.trace.cancel()
                 self.gate.ready = False; self.server.access.close()
                 self.server.shutdown(); self.server.server_close()
                 if self.thread: self.thread.join(timeout=3)
