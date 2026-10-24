@@ -22,9 +22,35 @@ from readonly_server import create_server, create_private_server
 
 HTTPS_PORT = 8443
 
+# Only these literals may cross the diagnostic boundary. Never stringify CLI
+# output, an exception, a path, a URL, an identity, or a request into a diagnostic.
+ERROR_CODES = frozenset('''transport_internal_error operation_failed
+invalid_tail_ip invalid_node tailscale_not_installed tailscale_status_invalid
+tailscale_version_unsupported tailscale_not_connected tailscale_self_offline
+tailscale_self_key_expired magicdns_required personal_identity_required
+serve_config_unknown serve_schema_unsupported proxy_header_denied transport_denied device_denied
+identity_unavailable serve_supervision_failed already_running
+device_selection_expired existing_serve_or_funnel snapshot_required
+serve_start_failed https_setup_required https_start_failed serve_exited
+serve_failed serve_config_missing serve_configuration_changed
+serve_session_changed device_unavailable device_identity_changed
+device_addresses_changed device_offline device_not_ios device_key_expired
+device_tagged_or_shared tailnet_dns_changed not_running stop_unconfirmed
+watch_internal_error'''.split()) | frozenset(
+    f'cli_{operation}_{reason}'
+    for operation in ('version', 'status', 'config', 'whois', 'other')
+    for reason in ('timeout', 'launch', 'exit', 'size', 'encoding', 'json'))
+
+
+def diagnostic_code(value):
+    return value if isinstance(value, str) and value in ERROR_CODES else 'transport_internal_error'
+
 
 class TailnetError(ValueError):
     """Only fixed diagnostic codes; never echo CLI output, paths or identities."""
+    def __init__(self, code):
+        self.code = diagnostic_code(code)
+        super().__init__(self.code)
 
 
 def _fail(code):
@@ -65,6 +91,23 @@ class Device:
     ips: tuple
 
 
+def device_check_failure(selected, devices, cli=None):
+    """Display names and address order are NOT credentials. Keep every address.
+
+    Stable ID, owner, login, and the complete approved address set must match;
+    eligibility (online/iOS/key/tags/sharing) was checked by inspect().
+    """
+    for current in devices:
+        if current.node_id != selected.node_id:
+            continue
+        if current.user_id != selected.user_id or current.login != selected.login:
+            return 'device_identity_changed'
+        if set(current.ips) != set(selected.ips):
+            return 'device_addresses_changed'
+        return None
+    return diagnostic_code(getattr(cli, 'device_failures', {}).get(selected.node_id, 'device_unavailable'))
+
+
 class Tailscale:
     def __init__(self):
         if os.name == 'nt':
@@ -80,16 +123,37 @@ class Tailscale:
         return [self.executable, *args]
 
     def run(self, *args, json_result=True):
+        operation = {'version': 'version', 'status': 'status', 'serve': 'config', 'whois': 'whois'}.get(args[0] if args else '', 'other')
         try:
             result = subprocess.run(self.command(*args), stdin=subprocess.DEVNULL,
                 stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=6,
                 creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
-            if result.returncode or len(result.stdout) > 2_000_000:
-                _fail('tailscale_command_failed')
+        except subprocess.TimeoutExpired:
+            _fail(f'cli_{operation}_timeout')
+        except (OSError, subprocess.SubprocessError):
+            _fail(f'cli_{operation}_launch')
+        if result.returncode:
+            _fail(f'cli_{operation}_exit')
+        if len(result.stdout) > 2_000_000:
+            _fail(f'cli_{operation}_size')
+        try:
             text = result.stdout.decode('utf-8')
-            return json.loads(text) if json_result else text
-        except (OSError, subprocess.SubprocessError, ValueError, UnicodeError):
-            _fail('tailscale_unavailable')
+        except UnicodeError:
+            _fail(f'cli_{operation}_encoding')
+        if not json_result:
+            return text
+        try:
+            def unique(pairs):
+                obj = {}
+                for key, value in pairs:
+                    if key in obj: raise ValueError()
+                    obj[key] = value
+                return obj
+            def reject_constant(_value):
+                raise ValueError()
+            return json.loads(text, object_pairs_hook=unique, parse_constant=reject_constant)
+        except (ValueError, RecursionError):
+            _fail(f'cli_{operation}_json')
 
     def inspect(self):
         try:
@@ -98,17 +162,24 @@ class Tailscale:
             _fail('tailscale_status_invalid')
 
     def _inspect(self):
+        self.device_failures = {}
         version = self.run('version', json_result=False).splitlines()[0]
         match = re.fullmatch(r'(\d+)\.(\d+)\.(\d+)', version.strip())
         if not match or tuple(map(int, match.groups())) < (1, 90, 9):
             _fail('tailscale_version_unsupported')
         status = self.run('status', '--json')
-        if not isinstance(status, dict) or status.get('BackendState') != 'Running':
+        if not isinstance(status, dict):
+            _fail('tailscale_status_invalid')
+        if status.get('BackendState') != 'Running':
             _fail('tailscale_not_connected')
         own = status.get('Self', {})
-        if not isinstance(own, dict) or own.get('Online') is not True or own.get('Expired', False) is not False or not _not_expired(own.get('KeyExpiry')):
-            _fail('tailscale_not_connected')
-        dns = own.get('DNSName', '').removesuffix('.')
+        if not isinstance(own, dict) or type(own.get('Online')) is not bool:
+            _fail('tailscale_status_invalid')
+        if own['Online'] is not True:
+            _fail('tailscale_self_offline')
+        if own.get('Expired', False) is not False or not _not_expired(own.get('KeyExpiry')):
+            _fail('tailscale_self_key_expired')
+        dns = own.get('DNSName', '').removesuffix('.').lower()
         if not re.fullmatch(r'[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.ts\.net', dns):
             _fail('magicdns_required')
         user_id = own.get('UserID')
@@ -118,13 +189,20 @@ class Tailscale:
             _fail('personal_identity_required')
         devices = []
         for peer in (status.get('Peer') or {}).values():
-            if (peer.get('OS') != 'iOS' or peer.get('UserID') != user_id or peer.get('Online') is not True or
-                peer.get('Expired', False) is not False or not _not_expired(peer.get('KeyExpiry')) or
-                peer.get('Tags') or peer.get('AltSharerUserID')):
+            node_id = _stable_id(peer.get('ID'))
+            reason = None
+            if peer.get('OS') != 'iOS': reason = 'device_not_ios'
+            elif type(peer.get('UserID')) is not int or peer.get('UserID') != user_id: reason = 'device_identity_changed'
+            elif peer.get('Tags') or peer.get('AltSharerUserID'): reason = 'device_tagged_or_shared'
+            elif peer.get('Expired', False) is not False or not _not_expired(peer.get('KeyExpiry')): reason = 'device_key_expired'
+            elif type(peer.get('Online')) is not bool: _fail('tailscale_status_invalid')
+            elif peer.get('Online') is not True: reason = 'device_offline'
+            if reason:
+                self.device_failures[node_id] = reason
                 continue
             ips = tuple(tail_ip(ip) for ip in peer.get('TailscaleIPs', []))
             if ips:
-                devices.append(Device(_stable_id(peer.get('ID')), user_id, login,
+                devices.append(Device(node_id, user_id, login,
                     str(peer.get('HostName', 'iPhone'))[:80], ips))
         return dns, devices
 
@@ -169,6 +247,28 @@ def verify_owned_config(config, authority, target):
     remainder = {k: v for k, v in inner.items() if k not in ('TCP', 'Web')}
     return (_empty_config(remainder) and inner.get('TCP') == {str(HTTPS_PORT): {'HTTPS': True}} and
         inner.get('Web') == {authority: {'Handlers': {'/': {'Proxy': target}}}})
+
+
+def config_failure(config, authority, target):
+    """Classify only. This never normalizes away an unknown config field."""
+    if not isinstance(config, dict):
+        return 'serve_config_unknown'
+    if _empty_config(config):
+        return 'serve_config_missing'
+    known = {'TCP', 'Web', 'Foreground', 'AllowFunnel', 'Services', 'ETag'}
+    blocks = [config]
+    foreground = config.get('Foreground')
+    if foreground is not None:
+        if not isinstance(foreground, dict):
+            return 'serve_schema_unsupported'
+        blocks.extend(foreground.values())
+    for block in blocks:
+        if not isinstance(block, dict) or set(block) - known:
+            return 'serve_schema_unsupported'
+        if any(value is not None and not isinstance(value, dict)
+               for key, value in block.items() if key != 'ETag'):
+            return 'serve_schema_unsupported'
+    return None if verify_owned_config(config, authority, target) else 'serve_configuration_changed'
 
 
 class TailnetGate:
@@ -251,15 +351,42 @@ class PhoneShare:
         self.server = None; self.thread = None; self.process = None; self.job = None
         self.monitor = None; self.cancel = threading.Event(); self.lock = threading.RLock()
         self.error = None; self.stop_confirmed = True
+        self.cleanup_error = None
+
+    def _record_failure(self, code):
+        self.error = diagnostic_code(code)
+        try:
+            print(self.error, flush=True)
+        except OSError:
+            pass  # Diagnostics must never prevent revocation/cleanup.
+
+    def _check_running(self, server, process, gate):
+        """One fail-closed check; reason survives cleanup and UI rendering."""
+        result = process.poll()
+        if result is not None:
+            _fail('serve_exited' if result == 0 else 'serve_failed')
+        config = self.cli.config()
+        reason = config_failure(config, server.authority, self.target)
+        if reason:
+            _fail(reason)
+        if next(iter(config['Foreground'])) != self.serve_session:
+            _fail('serve_session_changed')
+        dns, devices = self.cli.inspect()
+        if dns + ':' + str(HTTPS_PORT) != server.authority:
+            _fail('tailnet_dns_changed')
+        reason = device_check_failure(gate.device, devices, self.cli)
+        if reason:
+            _fail(reason)
 
     def start(self, p1_code, device, *, scenario='normal', snapshot_file=None, market_files=None):
         with self.lock:
             if self.server or self.process:
                 _fail('already_running')
-            self.error = None; self.cancel = threading.Event()
+            self.error = None; self.cleanup_error = None; self.cancel = threading.Event()
             dns, devices = self.cli.inspect()
-            if device not in devices:
-                _fail('device_selection_expired')
+            reason = device_check_failure(device, devices, self.cli)
+            if reason:
+                _fail(reason)
             if not _empty_config(self.cli.config()):
                 _fail('existing_serve_or_funnel')
             self.gate = TailnetGate(self.cli, device)
@@ -286,33 +413,38 @@ class PhoneShare:
                 self.stop_confirmed = False
                 deadline = time.monotonic() + 20
                 while time.monotonic() < deadline:
-                    if self.process.poll() is not None:
-                        _fail('serve_start_failed')
-                    if verify_owned_config(self.cli.config(), self.server.authority, self.target):
+                    result = self.process.poll()
+                    if result is not None:
+                        _fail('serve_exited' if result == 0 else 'serve_failed')
+                    config = self.cli.config()
+                    reason = config_failure(config, self.server.authority, self.target)
+                    if reason and reason != 'serve_config_missing':
+                        _fail(reason)
+                    if verify_owned_config(config, self.server.authority, self.target):
+                        self.serve_session = next(iter(config['Foreground']))
+                        # Do not announce success before the same monitor checks
+                        # have passed. Never enable requests while checks fail.
+                        self._check_running(self.server, self.process, self.gate)
                         self.gate.ready = True
                         self.monitor = threading.Thread(target=self._watch,
                             args=(self.cancel, self.server, self.process, self.gate), daemon=True); self.monitor.start()
                         return self.url
                     self.cancel.wait(0.25)
                 _fail('https_setup_required')
-            except (OSError, ValueError):
+            except (OSError, ValueError, AttributeError, TypeError, KeyError) as error:
+                code = error.code if isinstance(error, TailnetError) else 'https_start_failed'
+                self._record_failure(code)
                 self.stop()
-                _fail('https_start_failed')
+                _fail(code)
 
     def _watch(self, cancel, server, process, gate):
         while not cancel.wait(2):
             try:
-                if process.poll() is not None:
-                    _fail('serve_exited')
-                if not verify_owned_config(self.cli.config(), server.authority, self.target):
-                    _fail('serve_configuration_changed')
-                dns, devices = self.cli.inspect()
-                if dns + ':' + str(HTTPS_PORT) != server.authority or gate.device not in devices:
-                    _fail('device_or_tailnet_changed')
-            except (ValueError, OSError, AttributeError):
+                self._check_running(server, process, gate)
+            except (ValueError, OSError, AttributeError, TypeError, KeyError) as error:
                 with self.lock:
                     if not cancel.is_set() and self.server is server:
-                        self.error = '连接或设备状态改变，已撤销会话并停止分享。'
+                        self._record_failure(error.code if isinstance(error, TailnetError) else 'watch_internal_error')
                         self.stop()
                 return
 
@@ -345,4 +477,6 @@ class PhoneShare:
                     self.stop_confirmed = _empty_config(self.cli.config())
                 except (ValueError, OSError):
                     self.stop_confirmed = False
+                if not self.stop_confirmed:
+                    self.cleanup_error = 'stop_unconfirmed'
             return self.stop_confirmed

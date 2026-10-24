@@ -4,9 +4,10 @@ import os
 from pathlib import Path
 import threading
 
-from tailscale_transport import PhoneShare, TailnetError, Tailscale
+from tailscale_transport import PhoneShare, TailnetError, Tailscale, diagnostic_code, device_check_failure
 
 MESSAGES = {
+    'operation_failed': '请检查选定P1源码及JSON（同一已确认本地数据目录、格式有效），未建立分享。',
     'tailscale_not_installed': '请先安装官方Windows版Tailscale，再重新打开本窗口。',
     'tailscale_version_unsupported': '请使用正式版Tailscale 1.90.9或更新版本。',
     'tailscale_not_connected': '请让电脑和iPhone登录同一Tailscale账号，并保持连接。',
@@ -15,7 +16,44 @@ MESSAGES = {
     'existing_serve_or_funnel': '已有Serve或Funnel配置，已拒绝启动且没有覆盖。请先自行停止旧分享。',
     'device_selection_expired': '设备状态已改变。请刷新设备列表，重新选择在线iPhone。',
     'https_start_failed': 'HTTPS未能启动。请确认Tailscale已连接，并已开启MagicDNS/HTTPS证书；不会降级为HTTP。',
+    'serve_exited': 'Serve前台进程已退出（返回成功），本次分享已撤销。',
+    'serve_failed': 'Serve前台进程异常退出，本次分享已撤销。',
+    'serve_config_missing': 'JSON状态中的本次Serve配置消失，已撤销分享。',
+    'serve_configuration_changed': 'Serve配置不再是本次唯一HTTPS代理，已撤销分享。',
+    'serve_session_changed': 'Serve前台会话已改变，已撤销分享。',
+    'serve_config_unknown': 'Tailscale返回了无法识别的Serve状态结构，已拒绝分享。',
+    'serve_schema_unsupported': 'Serve状态结构与已核对版本不同，已拒绝分享。',
+    'tailscale_status_invalid': 'Tailscale设备状态结构无法确认，已拒绝分享。',
+    'tailscale_self_offline': 'Windows设备已不在线，已撤销分享。请连接电脑Tailscale后重试。',
+    'tailscale_self_key_expired': 'Windows设备密钥已失效，已撤销分享。',
+    'tailnet_dns_changed': '电脑的私网DNS名称已改变，旧地址及授权已撤销。',
+    'device_unavailable': '原授权设备未出现在可确认的设备列表中，已撤销分享。',
+    'device_identity_changed': '原设备身份或所属用户已改变，已撤销分享。',
+    'device_addresses_changed': '授权设备的IP集合改变，已撤销分享；请刷新并重新核对设备。',
+    'device_offline': '授权iPhone已离线，已撤销分享。请在手机连接Tailscale后重试。',
+    'device_not_ios': '授权设备不再被确认为iOS设备，已撤销分享。',
+    'device_key_expired': '授权iPhone密钥已失效，已撤销分享。',
+    'device_tagged_or_shared': '设备带标签或属于分享节点，已撤销分享。',
+    'https_setup_required': '等待前台HTTPS配置超时。请核对Tailscale证书启用状态后重试。',
 }
+
+
+def error_message(code):
+    code = diagnostic_code(code)
+    if code.startswith('cli_'):
+        explanation = 'Tailscale CLI检查失败，已拒绝分享。'
+    else:
+        explanation = MESSAGES.get(code, '操作未完成，分享未保持。请复制固定诊断码。')
+    return f'[{code}] {explanation} 文件选择仍保留，可直接重试。'
+
+
+def refreshed_choice(previous, devices):
+    """Retain the explicit choice only when all approved identity fields match."""
+    if previous is not None:
+        for label, current in devices.items():
+            if device_check_failure(previous, [current]) is None:
+                return label
+    return ''
 
 
 def main(*, real=False):
@@ -30,6 +68,7 @@ def main(*, real=False):
     device = tk.StringVar(); scenario = tk.StringVar(value='正常历史快照')
     status = tk.StringVar(value='先连接两端Tailscale，再刷新并选择本次唯一授权的iPhone。')
     url = tk.StringVar(value='尚未启动'); code = tk.StringVar(value='未生成')
+    diagnostic = tk.StringVar(value='')
     chosen = {'code': None, 'snapshot': None, 'markets': []}
     scenarios = {'正常历史快照': 'normal', '缺少行情': 'missing', '数据过期': 'stale'}
     body = ttk.Frame(app, padding=22); body.pack(fill='both', expand=True)
@@ -53,6 +92,7 @@ def main(*, real=False):
         status.set('正在检查私网状态，请稍候。')
         def run():
             try: events.put((task, action(), None))
+            except TailnetError as error: events.put((task, None, error.code))
             except (ValueError, OSError): events.put((task, None, 'operation_failed'))
         threading.Thread(target=run, daemon=True).start()
 
@@ -103,6 +143,10 @@ def main(*, real=False):
             app.clipboard_clear(); app.clipboard_append(url.get())
             status.set('已复制不含凭据的地址；可发送到自己的iPhone，用Safari打开。配对码另在本窗口查看。')
 
+    def copy_diagnostic():
+        if diagnostic.get():
+            app.clipboard_clear(); app.clipboard_append(diagnostic_code(diagnostic.get()))
+
     if real:
         initial = Path(os.environ.get('LOCALAPPDATA', Path.home())) / 'GooseResearchP1'
         selections = ttk.Frame(body); selections.pack(anchor='w', fill='x', before=row)
@@ -131,6 +175,7 @@ def main(*, real=False):
     for title, callback in actions:
         button = ttk.Button(row, text=title, command=callback); button.pack(side='left', padx=(0, 8)); buttons.append(button)
     ttk.Button(body, text='复制手机地址', command=copy_url).pack(anchor='w')
+    ttk.Button(body, text='复制诊断码（仅固定代码）', command=copy_diagnostic).pack(anchor='w')
     ttk.Label(body, text='撤销授权、停止或关闭窗口会清空会话及内存数据、关闭本次Serve。\n更新配对码也会撤销旧会话。手机不保存持仓；请勿分享配对码。' if real else '停止或关闭本窗口会清空会话、关闭本机接口及前台Serve进程。\n不要向他人发送配对码；手机四页一直标记“仅虚构测试”。', justify='left').pack(anchor='w', pady=12)
 
     def pump():
@@ -142,13 +187,16 @@ def main(*, real=False):
                 for button in buttons: button.configure(state='normal')
                 if error or isinstance(result, tuple) and result[0] == 'error':
                     key = result[1] if isinstance(result, tuple) else error
-                    status.set(MESSAGES.get(key, '操作未完成。请检查Tailscale、P1源码及选定JSON（同一已确认本地数据目录、非Git/同步路径、格式有效）。未建立分享。' if real else '操作未完成；没有读取真实数据。请检查Tailscale连接及P1源码版本。'))
+                    diagnostic.set(diagnostic_code(key)); status.set(error_message(key))
+                    if task == 'start': url.set('已停止'); code.set('已撤销')
                 elif task == 'refresh':
+                    previous = devices.get(device.get())
                     devices = {f'{p.name} · {p.ips[0]} · {p.node_id[-6:]}': p for p in result}
-                    picker.configure(values=list(devices)); device.set('')
+                    picker.configure(values=list(devices)); device.set(refreshed_choice(previous, devices))
                     status.set('请选择并核对本次授权iPhone。' if devices else '没有同账号在线iPhone。请在手机打开Tailscale并连接后刷新。')
                 elif task == 'start':
                     if share and share.server and share.gate.ready:
+                        diagnostic.set('')
                         url.set(result); code.set(share.server.access.pair_code)
                         status.set(('真实持仓只读分享已启动。' if real else '虚构HTTPS已启动。') + '用指定iPhone的Safari打开地址，输入配对码。')
                     else:
@@ -160,7 +208,8 @@ def main(*, real=False):
         except queue.Empty:
             pass
         if not busy and share and share.error:
-            code.set('已撤销'); url.set('已停止'); status.set(share.error + ('' if share.stop_confirmed else ' 请退出Windows Tailscale以确认断开。'))
+            code.set('已撤销'); url.set('已停止'); diagnostic.set(diagnostic_code(share.error))
+            status.set(error_message(share.error) + ('' if share.stop_confirmed else ' [stop_unconfirmed] 请退出Windows Tailscale以确认断开。'))
         app.after(150, pump)
 
     def close():

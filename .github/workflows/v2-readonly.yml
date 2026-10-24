@@ -33,6 +33,12 @@ jobs:
         env:
           GOOSE_P1_CODE: ${{ github.workspace }}/_p1_dependency
         run: python -m unittest discover -s v2/tests -p test_private.py -v
+      # Keep monitoring tests in both native environments; no real CLI login.
+      # The 1.104.2 fixtures contain no user status or private configuration.
+      - name: Tailscale 1.104.2 monitor diagnostics and Windows retry
+        env:
+          GOOSE_P1_CODE: ${{ github.workspace }}/_p1_dependency
+        run: python -m unittest discover -s v2/tests -p test_transport_monitor.py -v
       - name: Original demo cache
         run: node v2/tests/sw.test.cjs
       - name: Readonly contract and mode isolation
