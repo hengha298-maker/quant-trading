@@ -53,6 +53,8 @@ jobs:
         run: python -m unittest discover -s v2/tests -p test_official_identity_schema.py -v
       - name: Strict identity field diagnostics
         run: python -m unittest discover -s v2/tests -p test_identity_diagnostics.py -v
+      - name: Legacy peer authorization requires fresh admitted key and trusted Serve
+        run: python -m unittest discover -s v2/tests -p test_peer_authorization.py -v
       - name: Identity startup preflight before selected files
         run: python -m unittest discover -s v2/tests -p test_identity_preflight.py -v
       - name: Share history remains separate from current observation window

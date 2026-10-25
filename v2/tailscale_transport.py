@@ -20,16 +20,17 @@ import time
 
 from readonly_server import create_server, create_private_server
 from connection_diagnostics import CONNECTION_CODES, RequestTrace, check_local_https
-from identity_diagnostics import WHOIS_CODES, identity_failures as diagnose_identity
+from identity_diagnostics import (WHOIS_CODES, identity_failures as diagnose_identity,
+                                  peer_authorization_failures)
 import identity_diagnostics as identity_contract
 
 HTTPS_PORT = 8443
-DIAGNOSTIC_PROTOCOL = 3
-BUILD_CODE = 'diagnostics_identity_v3'
+DIAGNOSTIC_PROTOCOL = 4
+BUILD_CODE = 'diagnostics_identity_v4'
 REQUEST_CODES = frozenset('''proxy_request_arrived proxy_xff_missing
 proxy_xff_duplicate proxy_xff_invalid proxy_xff_not_selected
 proxy_login_missing proxy_login_duplicate proxy_login_mismatch
-identity_preflight_failed diagnostics_identity_v3 diag_no_result
+identity_preflight_failed diagnostics_identity_v4 diag_no_result
 diag_check_in_progress diagnostic_component_mismatch'''.split())
 
 # Only these literals may cross the diagnostic boundary. Never stringify CLI
@@ -364,35 +365,74 @@ class TailnetGate:
             _fail('proxy_login_mismatch')
         self.trace_note(handler, 'phone_proxy_headers_ok')
         self.trace_note(handler, 'phone_whois_started')
-        binding = self.verify_identity(ip)
+        # Only this branch supplies ingress evidence: the secret loopback route
+        # and every overwritten HTTPS/source/login header have just passed.
+        # Serve itself accepts this connection after WireGuard/ACL filtering.
+        binding = self.verify_identity(ip, _serve_verified=True)
         handler.path = handler.path[len(self.prefix):]
         return binding
 
-    def verify_identity(self, ip):
+    def verify_identity(self, ip, *, _serve_verified=False):
         """Revalidate the exact approved node; no proxy/header bypass.
 
         Tailscale 1.104.2's whois CLI encodes Node.KeyExpiry with omitzero.
         A missing field therefore represents disabled expiry ONLY for that
         verified CLI version. Explicit null is not the documented encoding.
+
+        Explicit false/type errors are never overridden. A legacy peer with
+        missing MachineAuthorized needs BOTH a fresh control-map key binding
+        and actual verified Serve ingress; owner preflight cannot authorize.
         """
-        failures = self.identity_failures(ip)
+        failures, needs_serve = self._identity_checks(ip)
         if failures:
             _fail(failures[0])
+        if needs_serve and _serve_verified is not True:
+            _fail('whois_authorization_requires_serve')
         return self.device.node_id
 
     def identity_failures(self, ip):
-        """Owner diagnostics reuse the same rejection logic; no raw values."""
+        """Owner preflight eligibility only; never grants a device binding."""
+        return self._identity_checks(ip)[0]
+
+    def _identity_checks(self, ip):
+        """Return fixed failures and whether real Serve ingress is still needed.
+
+        No positive status/identity cache: startup, diagnostics and EVERY HTTP
+        request obtain their own whois, and legacy peers their own live status.
+        """
         try:
             ip = tail_ip(ip)
             if ip not in self.device.ips:
-                return ('device_denied',)
+                return ('device_denied',), False
             document = self.cli.whois(ip)
-            return diagnose_identity(document, self.device, ip,
-                                     getattr(self.cli, 'verified_version', None), _not_expired)
+            version = getattr(self.cli, 'verified_version', None)
+            failures = diagnose_identity(document, self.device, ip, version, _not_expired)
+            missing = 'whois_machine_authorized_missing'
+            if missing not in failures:
+                return failures, False
+            if failures != (missing,):
+                # Independent evidence can only resolve this ONE missing
+                # legacy flag. Never attempt it for an already invalid node.
+                return failures, False
+            if version != (1, 104, 2):
+                return failures + ('whois_machine_authorized_missing_unverified_version',), False
+            try:
+                status = self.cli.run('status', '--json')
+                corroboration = peer_authorization_failures(status, document, self.device, _not_expired)
+            except TailnetError as error:
+                corroboration = (error.code,)
+            except (OSError, KeyError, TypeError, AttributeError, ValueError):
+                corroboration = ('identity_unavailable',)
+            if corroboration:
+                return tuple(dict.fromkeys(failures + corroboration)), False
+            # Missing is not rewritten to true. The owner may start a locked
+            # service after this provisional check, but no request can obtain
+            # a binding without fresh checks AND the trusted ingress context.
+            return tuple(code for code in failures if code != missing), True
         except TailnetError as error:
-            return (error.code,)
+            return (error.code,), False
         except (OSError, KeyError, TypeError, AttributeError, ValueError):
-            return ('identity_unavailable',)
+            return ('identity_unavailable',), False
 
 
 class _WindowsJob:

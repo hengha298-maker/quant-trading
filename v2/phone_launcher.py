@@ -6,7 +6,7 @@ import threading
 
 from tailscale_transport import PhoneShare, TailnetError, Tailscale, diagnostic_code, device_check_failure, WHOIS_CODES, BUILD_CODE
 
-DIAGNOSTIC_PROTOCOL = 3
+DIAGNOSTIC_PROTOCOL = 4
 
 
 def format_diagnostic(codes=()):

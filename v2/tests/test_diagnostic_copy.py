@@ -10,12 +10,12 @@ import phone_launcher as launcher
 import test_connection_controls as controls
 from tailscale_transport import ERROR_CODES
 
-BUILD = 'diagnostics_identity_v3'
+BUILD = 'diagnostics_identity_v4'
 
 
 class DiagnosticFormatTests(unittest.TestCase):
     def test_empty_results_always_identify_build_and_explicitly_say_no_result(self):
-        self.assertEqual(launcher.DIAGNOSTIC_PROTOCOL, 3)
+        self.assertEqual(launcher.DIAGNOSTIC_PROTOCOL, 4)
         self.assertEqual(launcher.BUILD_CODE, BUILD)
         for empty in (None, (), [], '', (BUILD,), BUILD):
             self.assertEqual(launcher.format_diagnostic(empty), BUILD + '\ndiag_no_result')

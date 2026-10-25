@@ -2,8 +2,12 @@
 
 Generator commit: e26db7a5797683ec99ad1516c40b628c7f2dfd71
 Toolchain: go1.27.3 linux/amd64
+Raw JSON SHA256: 6e08a8420bbee9ce7243cbf8fc810a0973bb127b81bad81c9a83e41184c6eb40
 This is an offline serialization contract fixture, NOT an iPhone response.
-No device, account, tailnet or secret was accessed.
+No device, account, tailnet or secret was accessed. Public keys are fixed
+fictional text decoded by the official key.NodePublic.UnmarshalText method.
+Missing MachineAuthorized alone does not distinguish approval: the omitted
+cases separately include a current approved peer binding, no peer, or zero key.
 """
 import json
 
@@ -20,7 +24,7 @@ OFFICIAL_1042 = json.loads(r'''
           "StableID": "nContractPhone",
           "Name": "fixture-phone.fixture-tail.ts.net.",
           "User": 101,
-          "Key": "nodekey:0000000000000000000000000000000000000000000000000000000000000000",
+          "Key": "nodekey:1111111111111111111111111111111111111111111111111111111111111111",
           "Addresses": [
             "100.101.102.103/32",
             "fd7a:115c:a1e0::103/128"
@@ -43,7 +47,7 @@ OFFICIAL_1042 = json.loads(r'''
         "Self": {
           "ID": "nContractPC",
           "NodeID": 201,
-          "PublicKey": "nodekey:0000000000000000000000000000000000000000000000000000000000000000",
+          "PublicKey": "nodekey:2222222222222222222222222222222222222222222222222222222222222222",
           "HostName": "fixture-pc",
           "DNSName": "fixture-pc.fixture-tail.ts.net.",
           "OS": "windows",
@@ -78,10 +82,10 @@ OFFICIAL_1042 = json.loads(r'''
         "CertDomains": null,
         "ExtraRecords": null,
         "Peer": {
-          "nodekey:0000000000000000000000000000000000000000000000000000000000000000": {
+          "nodekey:1111111111111111111111111111111111111111111111111111111111111111": {
             "ID": "nContractPhone",
             "NodeID": 202,
-            "PublicKey": "nodekey:0000000000000000000000000000000000000000000000000000000000000000",
+            "PublicKey": "nodekey:1111111111111111111111111111111111111111111111111111111111111111",
             "HostName": "localhost",
             "DNSName": "fixture-phone.fixture-tail.ts.net.",
             "OS": "iOS",
@@ -130,7 +134,7 @@ OFFICIAL_1042 = json.loads(r'''
           "StableID": "nContractPhone",
           "Name": "fixture-phone.fixture-tail.ts.net.",
           "User": 101,
-          "Key": "nodekey:0000000000000000000000000000000000000000000000000000000000000000",
+          "Key": "nodekey:1111111111111111111111111111111111111111111111111111111111111111",
           "KeyExpiry": "2099-01-01T00:00:00Z",
           "Addresses": [
             "100.101.102.103/32",
@@ -154,7 +158,7 @@ OFFICIAL_1042 = json.loads(r'''
         "Self": {
           "ID": "nContractPC",
           "NodeID": 201,
-          "PublicKey": "nodekey:0000000000000000000000000000000000000000000000000000000000000000",
+          "PublicKey": "nodekey:2222222222222222222222222222222222222222222222222222222222222222",
           "HostName": "fixture-pc",
           "DNSName": "fixture-pc.fixture-tail.ts.net.",
           "OS": "windows",
@@ -189,10 +193,10 @@ OFFICIAL_1042 = json.loads(r'''
         "CertDomains": null,
         "ExtraRecords": null,
         "Peer": {
-          "nodekey:0000000000000000000000000000000000000000000000000000000000000000": {
+          "nodekey:1111111111111111111111111111111111111111111111111111111111111111": {
             "ID": "nContractPhone",
             "NodeID": 202,
-            "PublicKey": "nodekey:0000000000000000000000000000000000000000000000000000000000000000",
+            "PublicKey": "nodekey:1111111111111111111111111111111111111111111111111111111111111111",
             "HostName": "localhost",
             "DNSName": "fixture-phone.fixture-tail.ts.net.",
             "OS": "iOS",
@@ -235,7 +239,191 @@ OFFICIAL_1042 = json.loads(r'''
       }
     },
     {
+      "Name": "authorized_peer_omitted",
+      "Whois": {
+        "Node": {
+          "ID": 202,
+          "StableID": "nContractPhone",
+          "Name": "fixture-phone.fixture-tail.ts.net.",
+          "User": 101,
+          "Key": "nodekey:1111111111111111111111111111111111111111111111111111111111111111",
+          "Addresses": [
+            "100.101.102.103/32",
+            "fd7a:115c:a1e0::103/128"
+          ]
+        },
+        "UserProfile": {
+          "ID": 101,
+          "LoginName": "fiction@example.invalid",
+          "DisplayName": "FICTIONAL CONTRACT USER"
+        },
+        "CapMap": null
+      },
+      "Status": {
+        "Version": "1.104.2",
+        "TUN": false,
+        "BackendState": "Running",
+        "AuthURL": "",
+        "TailscaleIPs": null,
+        "Self": {
+          "ID": "nContractPC",
+          "NodeID": 201,
+          "PublicKey": "nodekey:2222222222222222222222222222222222222222222222222222222222222222",
+          "HostName": "fixture-pc",
+          "DNSName": "fixture-pc.fixture-tail.ts.net.",
+          "OS": "windows",
+          "UserID": 101,
+          "TailscaleIPs": [
+            "100.101.102.1"
+          ],
+          "Addrs": null,
+          "CurAddr": "",
+          "Relay": "",
+          "PeerRelay": "",
+          "RxBytes": 0,
+          "TxBytes": 0,
+          "Created": "0001-01-01T00:00:00Z",
+          "LastWrite": "0001-01-01T00:00:00Z",
+          "LastSeen": "0001-01-01T00:00:00Z",
+          "LastHandshake": "0001-01-01T00:00:00Z",
+          "Online": true,
+          "ExitNode": false,
+          "ExitNodeOption": false,
+          "Active": false,
+          "PeerAPIURL": null,
+          "TaildropTarget": 0,
+          "NoFileSharingReason": "",
+          "InNetworkMap": true,
+          "InMagicSock": false,
+          "InEngine": false
+        },
+        "Health": null,
+        "MagicDNSSuffix": "",
+        "CurrentTailnet": null,
+        "CertDomains": null,
+        "ExtraRecords": null,
+        "Peer": {
+          "nodekey:1111111111111111111111111111111111111111111111111111111111111111": {
+            "ID": "nContractPhone",
+            "NodeID": 202,
+            "PublicKey": "nodekey:1111111111111111111111111111111111111111111111111111111111111111",
+            "HostName": "localhost",
+            "DNSName": "fixture-phone.fixture-tail.ts.net.",
+            "OS": "iOS",
+            "UserID": 101,
+            "TailscaleIPs": [
+              "100.101.102.103",
+              "fd7a:115c:a1e0::103"
+            ],
+            "Addrs": null,
+            "CurAddr": "",
+            "Relay": "",
+            "PeerRelay": "",
+            "RxBytes": 0,
+            "TxBytes": 0,
+            "Created": "0001-01-01T00:00:00Z",
+            "LastWrite": "0001-01-01T00:00:00Z",
+            "LastSeen": "0001-01-01T00:00:00Z",
+            "LastHandshake": "0001-01-01T00:00:00Z",
+            "Online": true,
+            "ExitNode": false,
+            "ExitNodeOption": false,
+            "Active": false,
+            "PeerAPIURL": null,
+            "TaildropTarget": 0,
+            "NoFileSharingReason": "",
+            "InNetworkMap": true,
+            "InMagicSock": false,
+            "InEngine": false
+          }
+        },
+        "User": {
+          "101": {
+            "ID": 101,
+            "LoginName": "fiction@example.invalid",
+            "DisplayName": "FICTIONAL CONTRACT USER"
+          }
+        },
+        "ClientVersion": null
+      }
+    },
+    {
       "Name": "unauthorized_omitted",
+      "Whois": {
+        "Node": {
+          "ID": 202,
+          "StableID": "nContractPhone",
+          "Name": "fixture-phone.fixture-tail.ts.net.",
+          "User": 101,
+          "Key": "nodekey:1111111111111111111111111111111111111111111111111111111111111111",
+          "Addresses": [
+            "100.101.102.103/32",
+            "fd7a:115c:a1e0::103/128"
+          ]
+        },
+        "UserProfile": {
+          "ID": 101,
+          "LoginName": "fiction@example.invalid",
+          "DisplayName": "FICTIONAL CONTRACT USER"
+        },
+        "CapMap": null
+      },
+      "Status": {
+        "Version": "1.104.2",
+        "TUN": false,
+        "BackendState": "Running",
+        "AuthURL": "",
+        "TailscaleIPs": null,
+        "Self": {
+          "ID": "nContractPC",
+          "NodeID": 201,
+          "PublicKey": "nodekey:2222222222222222222222222222222222222222222222222222222222222222",
+          "HostName": "fixture-pc",
+          "DNSName": "fixture-pc.fixture-tail.ts.net.",
+          "OS": "windows",
+          "UserID": 101,
+          "TailscaleIPs": [
+            "100.101.102.1"
+          ],
+          "Addrs": null,
+          "CurAddr": "",
+          "Relay": "",
+          "PeerRelay": "",
+          "RxBytes": 0,
+          "TxBytes": 0,
+          "Created": "0001-01-01T00:00:00Z",
+          "LastWrite": "0001-01-01T00:00:00Z",
+          "LastSeen": "0001-01-01T00:00:00Z",
+          "LastHandshake": "0001-01-01T00:00:00Z",
+          "Online": true,
+          "ExitNode": false,
+          "ExitNodeOption": false,
+          "Active": false,
+          "PeerAPIURL": null,
+          "TaildropTarget": 0,
+          "NoFileSharingReason": "",
+          "InNetworkMap": true,
+          "InMagicSock": false,
+          "InEngine": false
+        },
+        "Health": null,
+        "MagicDNSSuffix": "",
+        "CurrentTailnet": null,
+        "CertDomains": null,
+        "ExtraRecords": null,
+        "Peer": {},
+        "User": {
+          "101": {
+            "ID": 101,
+            "LoginName": "fiction@example.invalid",
+            "DisplayName": "FICTIONAL CONTRACT USER"
+          }
+        },
+        "ClientVersion": null
+      }
+    },
+    {
+      "Name": "zero_key_peer_omitted",
       "Whois": {
         "Node": {
           "ID": 202,
@@ -264,7 +452,7 @@ OFFICIAL_1042 = json.loads(r'''
         "Self": {
           "ID": "nContractPC",
           "NodeID": 201,
-          "PublicKey": "nodekey:0000000000000000000000000000000000000000000000000000000000000000",
+          "PublicKey": "nodekey:2222222222222222222222222222222222222222222222222222222222222222",
           "HostName": "fixture-pc",
           "DNSName": "fixture-pc.fixture-tail.ts.net.",
           "OS": "windows",
@@ -351,7 +539,7 @@ OFFICIAL_1042 = json.loads(r'''
           "StableID": "nContractPhone",
           "Name": "fixture-phone.fixture-tail.ts.net.",
           "User": 101,
-          "Key": "nodekey:0000000000000000000000000000000000000000000000000000000000000000",
+          "Key": "nodekey:1111111111111111111111111111111111111111111111111111111111111111",
           "KeyExpiry": "2020-01-01T00:00:00Z",
           "Addresses": [
             "100.101.102.103/32",
@@ -376,7 +564,7 @@ OFFICIAL_1042 = json.loads(r'''
         "Self": {
           "ID": "nContractPC",
           "NodeID": 201,
-          "PublicKey": "nodekey:0000000000000000000000000000000000000000000000000000000000000000",
+          "PublicKey": "nodekey:2222222222222222222222222222222222222222222222222222222222222222",
           "HostName": "fixture-pc",
           "DNSName": "fixture-pc.fixture-tail.ts.net.",
           "OS": "windows",
@@ -411,10 +599,10 @@ OFFICIAL_1042 = json.loads(r'''
         "CertDomains": null,
         "ExtraRecords": null,
         "Peer": {
-          "nodekey:0000000000000000000000000000000000000000000000000000000000000000": {
+          "nodekey:1111111111111111111111111111111111111111111111111111111111111111": {
             "ID": "nContractPhone",
             "NodeID": 202,
-            "PublicKey": "nodekey:0000000000000000000000000000000000000000000000000000000000000000",
+            "PublicKey": "nodekey:1111111111111111111111111111111111111111111111111111111111111111",
             "HostName": "localhost",
             "DNSName": "fixture-phone.fixture-tail.ts.net.",
             "OS": "iOS",
@@ -459,4 +647,4 @@ OFFICIAL_1042 = json.loads(r'''
     }
   ]
 }
-''' )
+''')

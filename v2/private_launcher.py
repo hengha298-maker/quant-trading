@@ -1,8 +1,8 @@
 """Double-click entry: reject mixed diagnostic modules before data selection."""
 import importlib
 
-BUILD_CODE = 'diagnostics_identity_v3'
-DIAGNOSTIC_PROTOCOL = 3
+BUILD_CODE = 'diagnostics_identity_v4'
+DIAGNOSTIC_PROTOCOL = 4
 
 
 def main():

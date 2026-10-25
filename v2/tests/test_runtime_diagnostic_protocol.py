@@ -19,7 +19,7 @@ import tailscale_transport as transport
 import phone_launcher
 import test_phone as phone_tests
 
-BUILD_CODE = 'diagnostics_identity_v3'
+BUILD_CODE = 'diagnostics_identity_v4'
 MISMATCH_CODE = 'diagnostic_component_mismatch'
 COMPONENTS = ('identity_diagnostics', 'tailscale_transport', 'phone_launcher')
 
@@ -28,7 +28,7 @@ def components():
     modules = {}
     for name in COMPONENTS:
         module = ModuleType(name)
-        module.DIAGNOSTIC_PROTOCOL = 3
+        module.DIAGNOSTIC_PROTOCOL = 4
         module.__file__ = 'C:\\PRIVATE_SOURCE_PATH_CANARY\\' + name + '.py'
         modules[name] = module
     modules['phone_launcher'].main = Mock(return_value=0)
@@ -51,9 +51,9 @@ class RuntimeDiagnosticProtocolTests(unittest.TestCase):
         self.assertNotIn('C:', output)
         modules['phone_launcher'].main.assert_not_called()
 
-    def test_actual_components_publish_protocol_three_and_fixed_build_code(self):
+    def test_actual_components_publish_protocol_four_and_fixed_build_code(self):
         for module in (identity_diagnostics, transport, phone_launcher):
-            self.assertEqual(module.DIAGNOSTIC_PROTOCOL, 3)
+            self.assertEqual(module.DIAGNOSTIC_PROTOCOL, 4)
         self.assertEqual(transport.BUILD_CODE, BUILD_CODE)
 
     def test_complete_runtime_calls_only_the_real_mode_ui_entry(self):
@@ -66,7 +66,7 @@ class RuntimeDiagnosticProtocolTests(unittest.TestCase):
 
     def test_each_old_or_wrong_type_protocol_is_rejected_without_private_origins(self):
         for name in COMPONENTS:
-            for old in (0, 2, '3', None):
+            for old in (0, 2, 3, '4', None):
                 with self.subTest(component=name, protocol=old):
                     modules = components(); modules[name].DIAGNOSTIC_PROTOCOL = old
                     self.assert_rejected(modules)

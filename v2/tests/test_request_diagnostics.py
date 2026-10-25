@@ -4,6 +4,7 @@ The HTTP connection represents only Serve's local hop after TLS termination.
 This does not establish reachability from a physical iPhone.
 """
 from contextlib import redirect_stdout, redirect_stderr
+from copy import deepcopy
 from http.client import HTTPConnection
 import io
 import json
@@ -17,6 +18,7 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import tailscale_transport as phone
 import test_phone as phone_tests
+from test_peer_authorization import authorized_inputs
 
 
 @unittest.skipUnless(os.environ.get('GOOSE_P1_CODE'), 'dedicated CI provides pinned P1 sources')
@@ -74,6 +76,32 @@ class RequestDiagnosticsTests(unittest.TestCase):
         self.assertIn('no-store', headers['Cache-Control'])
         self.assertEqual(codes, {'proxy_request_arrived', 'phone_candidate_arrived', 'phone_proxy_headers_ok',
                                  'phone_whois_started', 'phone_identity_verified', 'phone_page_sent'})
+
+    def test_missing_peer_flag_still_needs_pairing_and_fresh_admitted_key_per_http_request(self):
+        # Only the local hop after Serve termination is simulated here. This
+        # exercises the actual HTTP/session boundary, not an iPhone tunnel.
+        document, current_status, device = authorized_inputs()
+        self.cli.who = document
+        self.gate.device = device
+        def fresh_status(*args):
+            self.assertEqual(args, ('status', '--json'))
+            return deepcopy(current_status)
+        with patch.object(self.cli, 'run', side_effect=fresh_status, create=True) as status_read:
+            # Positive network eligibility alone grants no asset access.
+            self.assertEqual(self.request()[0], 401)
+            code = self.server.access.pair_code
+            result, headers, _ = self.request('/session/pair', 'POST', {'code': code})
+            self.assertEqual(result, 200)
+            auth = {'Cookie': headers['Set-Cookie'].split(';')[0]}
+            result, headers, body = self.request(headers=auth)
+            self.assertEqual(result, 200)
+            self.assertIn('no-store', headers['Cache-Control'])
+            self.assertIn('accounts', json.loads(body))
+            current_status['Peer'] = {}
+            result, _, body = self.request(headers=auth)
+            self.assertEqual(result, 403)
+            self.assertEqual(json.loads(body), {'error': 'device_denied'})
+            self.assertEqual(status_read.call_count, 4)
 
     def test_windows_head_probe_and_unapproved_devices_do_not_pollute_phone_observation(self):
         for method, source in [('HEAD', '100.101.102.105'), ('GET', '100.101.102.104')]:
