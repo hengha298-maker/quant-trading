@@ -94,7 +94,7 @@ class Handler(BaseHTTPRequestHandler):
     def _trace(self, code):
         transport = self.server.transport
         if transport is not None and hasattr(transport, 'trace'):
-            transport.trace.record(getattr(self, 'trace_ticket', None), code)
+            transport.trace_note(self, code)
     def _send(self, status, body, mime='application/json; charset=utf-8', cookie=None):
         if isinstance(body, dict):
             body = json.dumps(body, ensure_ascii=True, allow_nan=False, separators=(',', ':')).encode('ascii')

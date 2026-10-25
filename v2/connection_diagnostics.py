@@ -23,13 +23,18 @@ phone_page_sent phone_reply_failed check_cancelled'''.split())
 
 
 class RequestTrace:
-    def __init__(self, clock=time.monotonic):
+    def __init__(self, clock=time.monotonic, allowed_codes=CONNECTION_CODES):
         self.clock = clock; self.lock = threading.Lock()
         self.epoch = 0; self.deadline = 0; self.codes = set()
+        self.allowed_codes = frozenset(allowed_codes)
+        # History belongs to this Share, independently of the observation
+        # window. Callers remember only trusted non-Self request stages.
+        self.history = set(); self.history_active = True
 
     def begin(self):
         with self.lock:
             self.epoch += 1; self.codes = set(); self.deadline = self.clock() + 40
+            self.history_active = True
             return self.epoch
 
     def candidate(self):
@@ -39,12 +44,30 @@ class RequestTrace:
             self.codes.add('phone_candidate_arrived')
             return self.epoch
 
+    def window_ticket(self):
+        """A proxy observation is not yet an attributed phone candidate."""
+        with self.lock:
+            return self.epoch if self.clock() < self.deadline else None
+
     def record(self, ticket, code):
-        if code not in CONNECTION_CODES or ticket is None:
+        if not isinstance(code, str) or code not in self.allowed_codes or ticket is None:
             return
         with self.lock:
             if ticket == self.epoch and self.clock() < self.deadline:
                 self.codes.add(code)
+
+    def remember(self, code):
+        """Store fixed base codes only; never identities, time, paths or counts."""
+        if not isinstance(code, str) or code not in self.allowed_codes or code.startswith('history_'):
+            return
+        with self.lock:
+            if self.history_active:
+                self.history.add(code)
+
+    def history_report(self):
+        """Explicit prefixes keep Share history separate from window evidence."""
+        with self.lock:
+            return tuple('history_' + code for code in sorted(self.history))
 
     def finish(self, ticket):
         with self.lock:
@@ -56,6 +79,7 @@ class RequestTrace:
     def cancel(self):
         with self.lock:
             self.epoch += 1; self.deadline = 0; self.codes.clear()
+            self.history.clear(); self.history_active = False
 
 
 def _resolve(host, port):

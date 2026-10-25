@@ -20,8 +20,13 @@ import time
 
 from readonly_server import create_server, create_private_server
 from connection_diagnostics import CONNECTION_CODES, RequestTrace, check_local_https
+from identity_diagnostics import WHOIS_CODES, identity_failures as diagnose_identity
 
 HTTPS_PORT = 8443
+REQUEST_CODES = frozenset('''proxy_request_arrived proxy_xff_missing
+proxy_xff_duplicate proxy_xff_invalid proxy_xff_not_selected
+proxy_login_missing proxy_login_duplicate proxy_login_mismatch
+identity_preflight_failed'''.split())
 
 # Only these literals may cross the diagnostic boundary. Never stringify CLI
 # output, an exception, a path, a URL, an identity, or a request into a diagnostic.
@@ -37,10 +42,12 @@ serve_failed serve_config_missing serve_configuration_changed
 serve_session_changed device_unavailable device_identity_changed
 device_addresses_changed device_offline device_not_ios device_key_expired
 device_tagged_or_shared tailnet_dns_changed not_running stop_unconfirmed
-watch_internal_error'''.split()) | CONNECTION_CODES | frozenset(
+watch_internal_error'''.split()) | CONNECTION_CODES | WHOIS_CODES | REQUEST_CODES | frozenset(
     f'cli_{operation}_{reason}'
     for operation in ('version', 'status', 'config', 'whois', 'other')
     for reason in ('timeout', 'launch', 'exit', 'size', 'encoding', 'json'))
+BASE_ERROR_CODES = ERROR_CODES
+ERROR_CODES = BASE_ERROR_CODES | frozenset('history_' + code for code in BASE_ERROR_CODES)
 
 
 def diagnostic_code(value):
@@ -282,34 +289,52 @@ class TailnetGate:
         self.device = device
         self.prefix = '/_goose_bridge_' + secrets.token_urlsafe(32)
         self.ready = False
-        self.trace = RequestTrace()
+        self.trace = RequestTrace(allowed_codes=BASE_ERROR_CODES)
+
+    def trace_note(self, handler, code):
+        self.trace.record(getattr(handler, 'trace_ticket', None), code)
+        if getattr(handler, 'trace_track', False):
+            self.trace.remember(code)
 
     def verify(self, handler):
-        # A candidate is not an authenticated device. Attribute only the
-        # selected address through this run's private loopback proxy path.
-        # Windows' self HTTPS probe has a different source and is not counted.
+        # Keep fixed-code evidence from this Share, including requests outside
+        # the short owner-check window. Unattributed proxy requests are never
+        # reported as authenticated iPhone requests. Known Self is excluded.
         values = handler.headers.get_all('X-Forwarded-For', [])
-        candidate = (handler.client_address[0] == '127.0.0.1' and
-                     handler.path.startswith(self.prefix + '/') and
-                     len(values) == 1 and values[0] in self.device.ips)
-        handler.trace_ticket = self.trace.candidate() if candidate else None
+        canonical_ip = None
+        if len(values) == 1:
+            try: canonical_ip = tail_ip(values[0])
+            except TailnetError: pass
+        trusted_proxy = handler.client_address[0] == '127.0.0.1' and handler.path.startswith(self.prefix + '/')
+        self_request = canonical_ip is not None and canonical_ip in getattr(self.cli, 'self_ips', ())
+        handler.trace_track = trusted_proxy and not self_request
+        candidate = handler.trace_track and canonical_ip in self.device.ips
+        handler.trace_ticket = (self.trace.candidate() if candidate else self.trace.window_ticket()) if handler.trace_track else None
+        if handler.trace_track:
+            self.trace_note(handler, 'proxy_request_arrived')
+            if candidate:
+                self.trace_note(handler, 'phone_candidate_arrived')
         try:
             result = self._verify_request(handler)
         except TailnetError as error:
             if error.code == 'cli_whois_timeout': code = 'phone_whois_timeout'
-            elif error.code in ('cli_whois_json', 'cli_whois_encoding', 'identity_unavailable'): code = 'phone_whois_json_failed'
+            elif error.code in ('cli_whois_json', 'cli_whois_encoding', 'identity_unavailable', 'whois_document_type', 'whois_node_type', 'whois_profile_type'): code = 'phone_whois_json_failed'
             elif error.code.startswith('cli_whois_'): code = 'phone_whois_cli_failed'
-            elif error.code == 'device_denied': code = 'phone_identity_rejected'
+            elif error.code in WHOIS_CODES or error.code == 'device_denied': code = 'phone_identity_rejected'
             else: code = 'phone_proxy_headers_rejected'
-            self.trace.record(handler.trace_ticket, code)
+            self.trace_note(handler, error.code)
+            self.trace_note(handler, code)
             raise
-        self.trace.record(handler.trace_ticket, 'phone_identity_verified')
+        self.trace_note(handler, 'phone_identity_verified')
         return result
 
     def _verify_request(self, handler):
         def header(name):
             values = handler.headers.get_all(name, [])
             if len(values) != 1:
+                if name in ('X-Forwarded-For', 'Tailscale-User-Login'):
+                    field = 'xff' if name == 'X-Forwarded-For' else 'login'
+                    _fail('proxy_' + field + ('_missing' if not values else '_duplicate'))
                 _fail('proxy_header_denied')
             return values[0]
         if (not self.ready or handler.client_address[0] != '127.0.0.1' or
@@ -319,11 +344,16 @@ class TailnetGate:
             handler.headers.get('Tailscale-Funnel-Request') is not None or
             handler.headers.get('Forwarded') is not None):
             _fail('transport_denied')
-        ip = tail_ip(header('X-Forwarded-For'))  # Single, overwritten Serve value; no chains.
-        if ip not in self.device.ips or header('Tailscale-User-Login') != self.device.login:
-            _fail('device_denied')
-        self.trace.record(handler.trace_ticket, 'phone_proxy_headers_ok')
-        self.trace.record(handler.trace_ticket, 'phone_whois_started')
+        try: ip = tail_ip(header('X-Forwarded-For'))
+        except TailnetError as error:
+            if error.code == 'invalid_tail_ip': _fail('proxy_xff_invalid')
+            raise
+        if ip not in self.device.ips:
+            _fail('proxy_xff_not_selected')
+        if header('Tailscale-User-Login') != self.device.login:
+            _fail('proxy_login_mismatch')
+        self.trace_note(handler, 'phone_proxy_headers_ok')
+        self.trace_note(handler, 'phone_whois_started')
         binding = self.verify_identity(ip)
         handler.path = handler.path[len(self.prefix):]
         return binding
@@ -335,29 +365,24 @@ class TailnetGate:
         A missing field therefore represents disabled expiry ONLY for that
         verified CLI version. Explicit null is not the documented encoding.
         """
-        ip = tail_ip(ip)
-        if ip not in self.device.ips:
-            _fail('device_denied')
-        try:
-            who = self.cli.whois(ip)
-            node = who['Node']; user = who['UserProfile']
-            addresses = [ipaddress.ip_network(a, strict=False) for a in node['Addresses']]
-            if 'KeyExpiry' in node:
-                expiry_valid = isinstance(node['KeyExpiry'], str) and _not_expired(node['KeyExpiry'])
-            else:
-                expiry_valid = getattr(self.cli, 'verified_version', None) == (1, 104, 2)
-            if (node.get('StableID') != self.device.node_id or type(node.get('User')) is not int or
-                node.get('User') != self.device.user_id or user.get('ID') != self.device.user_id or
-                user.get('LoginName') != self.device.login or node.get('Tags') or
-                node.get('MachineAuthorized') is not True or node.get('Expired', False) is not False or
-                not expiry_valid or
-                not any(ipaddress.ip_address(ip) in n and n.prefixlen == n.max_prefixlen for n in addresses)):
-                _fail('device_denied')
-        except TailnetError:
-            raise
-        except (KeyError, TypeError, AttributeError, ValueError):
-            _fail('identity_unavailable')
+        failures = self.identity_failures(ip)
+        if failures:
+            _fail(failures[0])
         return self.device.node_id
+
+    def identity_failures(self, ip):
+        """Owner diagnostics reuse the same rejection logic; no raw values."""
+        try:
+            ip = tail_ip(ip)
+            if ip not in self.device.ips:
+                return ('device_denied',)
+            document = self.cli.whois(ip)
+            return diagnose_identity(document, self.device, ip,
+                                     getattr(self.cli, 'verified_version', None), _not_expired)
+        except TailnetError as error:
+            return (error.code,)
+        except (OSError, KeyError, TypeError, AttributeError, ValueError):
+            return ('identity_unavailable',)
 
 
 class _WindowsJob:
@@ -401,6 +426,7 @@ class PhoneShare:
         self.monitor = None; self.cancel = threading.Event(); self.lock = threading.RLock()
         self.error = None; self.stop_confirmed = True
         self.cleanup_error = None
+        self.identity_report = ()
 
     def _record_failure(self, code):
         self.error = diagnostic_code(code)
@@ -432,6 +458,7 @@ class PhoneShare:
             if self.server or self.process:
                 _fail('already_running')
             self.error = None; self.cleanup_error = None; self.cancel = threading.Event()
+            self.identity_report = ()
             dns, devices = self.cli.inspect()
             reason = device_check_failure(device, devices, self.cli)
             if reason:
@@ -439,6 +466,13 @@ class PhoneShare:
             if not _empty_config(self.cli.config()):
                 _fail('existing_serve_or_funnel')
             self.gate = TailnetGate(self.cli, device)
+            # Reject before reading selected assets or advertising a share.
+            # Report every blocking predicate in one owner-visible result.
+            self.identity_report = tuple(dict.fromkeys(code for ip in device.ips
+                for code in self.gate.identity_failures(ip)))
+            if self.identity_report:
+                self._record_failure(self.identity_report[0])
+                _fail(self.identity_report[0])
             if snapshot_file is None:
                 if market_files is not None:
                     _fail('snapshot_required')
@@ -513,11 +547,8 @@ class PhoneShare:
             authority = server.authority
             self_ips = getattr(self.cli, 'self_ips', ())
         codes = []
-        try:
-            gate.verify_identity(gate.device.ips[0])
-            codes.append('check_whois_ok')
-        except (ValueError, OSError) as error:
-            codes.extend(('check_whois_failed', error.code if isinstance(error, TailnetError) else 'identity_unavailable'))
+        failures = tuple(dict.fromkeys(code for ip in gate.device.ips for code in gate.identity_failures(ip)))
+        codes.extend(('check_whois_failed', *failures) if failures else ('check_whois_ok',))
         if not cancel.is_set():
             codes.extend(check_local_https(authority, self_ips))
         # The browser can be refreshed during this window. Stops remain usable;
@@ -528,6 +559,7 @@ class PhoneShare:
             gate.trace.cancel()
             return ('check_cancelled',)
         codes.extend(gate.trace.finish(ticket))
+        codes.extend(gate.trace.history_report())
         return tuple(dict.fromkeys(diagnostic_code(code) for code in codes))
 
     def stop(self):

@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 import threading
 
-from tailscale_transport import PhoneShare, TailnetError, Tailscale, diagnostic_code, device_check_failure
+from tailscale_transport import PhoneShare, TailnetError, Tailscale, diagnostic_code, device_check_failure, WHOIS_CODES
 
 MESSAGES = {
     'operation_failed': '请检查选定P1源码及JSON（同一已确认本地数据目录、格式有效），未建立分享。',
@@ -40,7 +40,9 @@ MESSAGES = {
 
 def error_message(code):
     code = diagnostic_code(code)
-    if code.startswith('cli_'):
+    if code in WHOIS_CODES:
+        explanation = '指定设备的该项whois核验未通过，已拒绝分享；复制诊断码可取得本次全部阻断条件。'
+    elif code.startswith('cli_'):
         explanation = 'Tailscale CLI检查失败，已拒绝分享。'
     else:
         explanation = MESSAGES.get(code, '操作未完成，分享未保持。请复制固定诊断码。')
@@ -61,7 +63,7 @@ def connection_message(codes):
         'check_whois_ok': '电脑已成功复核指定iPhone身份。',
         'check_whois_failed': '电脑的whois复核失败；后续固定码说明原因。',
         'check_local_https_ok': 'Windows访问自身HTTPS及应用403正常；不代表手机方向已通。',
-        'phone_request_not_observed': '本轮未观察到授权地址的请求；尚不能区分手机DNS、TCP/TLS或VPN/代理。',
+        'phone_request_not_observed': '仅本次短窗口未记录候选请求；请同时参考history_本次分享摘要，不能据此判断网络不通。',
         'phone_candidate_arrived': '选定IP的候选请求已到应用，仍需身份核验。',
         'phone_identity_verified': '请求已通过指定设备完整身份核验。',
         'phone_page_sent': '配对页已写入Serve，不证明Safari已收到；需查返回路径及手机VPN/代理。',
@@ -80,8 +82,12 @@ def connection_message(codes):
                 'phone_proxy_headers_rejected', 'phone_page_sent', 'phone_identity_verified',
                 'phone_request_not_observed', 'phone_candidate_arrived')
     local = next((code for code in safe if code.startswith('check_local_')), None)
+    identity = next((code for code in safe if code in WHOIS_CODES), None)
     phone = next((code for code in priority if code in safe), None)
-    selected = tuple(dict.fromkeys(code for code in (local, phone) if code))
+    history = next((code for code in safe if code.startswith('history_')), None)
+    selected = tuple(dict.fromkeys(code for code in (identity or local, phone or history) if code))
+    for code in WHOIS_CODES:
+        explanations[code] = 'whois具体身份条件未通过，已保持拒绝；完整阻断条件可一次复制。'
     return '\n'.join(f'[{code}] {explanations.get(code, "对应检查结果已记录。")}' for code in selected) + '\n完整固定码可复制；文件选择未变。'
 
 
@@ -237,7 +243,9 @@ def main(*, real=False):
                 for button in buttons: button.configure(state='normal')
                 if error or isinstance(result, tuple) and result[0] == 'error':
                     key = result[1] if isinstance(result, tuple) else error
-                    diagnostic.set(diagnostic_code(key)); status.set(error_message(key))
+                    details = getattr(share, 'identity_report', ()) if task == 'start' else ()
+                    safe = tuple(dict.fromkeys(diagnostic_code(item) for item in (key, *details)))
+                    diagnostic.set('\n'.join(safe)); status.set(error_message(key))
                     if task == 'start': url.set('已停止'); code.set('已撤销')
                 elif task == 'refresh':
                     previous = devices.get(device.get())
@@ -258,7 +266,10 @@ def main(*, real=False):
         except queue.Empty:
             pass
         if not busy and share and share.error:
-            code.set('已撤销'); url.set('已停止'); diagnostic.set(diagnostic_code(share.error))
+            code.set('已撤销'); url.set('已停止')
+            details = getattr(share, 'identity_report', ())
+            safe = tuple(dict.fromkeys(diagnostic_code(item) for item in (share.error, *details)))
+            diagnostic.set('\n'.join(safe))
             status.set(error_message(share.error) + ('' if share.stop_confirmed else ' [stop_unconfirmed] 请退出Windows Tailscale以确认断开。'))
         app.after(150, pump)
 

@@ -49,6 +49,16 @@ jobs:
         run: python -m unittest discover -s v2/tests -p test_request_diagnostics.py -v
       - name: Windows diagnostic controls preserve selections and stopping
         run: python -m unittest discover -s v2/tests -p test_connection_controls.py -v
+      - name: Official Go encoded identity structures (synthetic, not live)
+        run: python -m unittest discover -s v2/tests -p test_official_identity_schema.py -v
+      - name: Strict identity field diagnostics
+        run: python -m unittest discover -s v2/tests -p test_identity_diagnostics.py -v
+      - name: Identity startup preflight before selected files
+        run: python -m unittest discover -s v2/tests -p test_identity_preflight.py -v
+      - name: Share history remains separate from current observation window
+        run: python -m unittest discover -s v2/tests -p test_identity_trace_history.py -v
+      - name: Native owner sees all identity blockers without another phone test
+        run: python -m unittest discover -s v2/tests -p test_identity_owner_controls.py -v
       - name: Original demo cache
         run: node v2/tests/sw.test.cjs
       - name: Readonly contract and mode isolation

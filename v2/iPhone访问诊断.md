@@ -1,5 +1,7 @@
 # 分享持续运行，但 iPhone Safari 打不开
 
+已收到HTTPS `device_denied` 且Windows `check_whois_failed`：请先看[逐字段身份拒绝与一次自动预检](身份拒绝修复说明.md)。旧总码不能确定具体字段；新版无需手机重测即可在启动时给全部阻断码，另保留窗口外请求历史。
+
 适用基线：PR #5 的 35c4440，Windows Tailscale 1.104.2。无需反复运行命令或改动私人数据。
 
 ## 已确认的修复
