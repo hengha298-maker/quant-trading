@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="zh-CN" data-private="false">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#172f2c" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="养鹅计划" />
+    <meta
+      name="description"
+      content="养鹅计划 V2：手机优先的个人投资软件，real_readonly模式基础版，仅代码内虚构测试。"
+    />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; worker-src 'none'; manifest-src 'none'; base-uri 'none'; form-action 'self'"
+    />
+    <title>养鹅计划 · 首页</title>
+    <link rel="icon" href="/assets/icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/assets/icon.svg" />
+    <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="/readonly.css" />
+    <script src="/readonly-model.js" defer></script>
+    <script src="/readonly.js" defer></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">跳到内容</a>
+    <div class="demo-strip">
+      <span class="demo-dot"></span> real_readonly · 仅虚构测试 · 真实持仓入口关闭
+      <span class="version-label">V2 / 认证虚构测试</span>
+    </div>
+    <aside class="sidebar" aria-label="应用导航">
+      <a class="brand" href="#/" aria-label="养鹅计划首页"
+        ><img src="/assets/icon.svg" width="42" height="42" alt="" /><span
+          >养鹅计划<small>让投资，慢慢生长</small></span
+        ></a
+      >
+      <nav class="desktop-nav" aria-label="主导航"></nav>
+      <div class="sidebar-bottom">
+        <div class="local-badge"><span></span> 虚构测试 · 需配对</div>
+        <p>本机测试或私网HTTPS · 需设备授权。<br />始终仅虚构数据，未接通真实账户。</p>
+        <button class="quiet-button" data-dialog="about">
+          连接与权限 <span>↗</span>
+        </button>
+      </div>
+    </aside>
+    <div class="workspace">
+      <header class="topbar">
+        <a class="mobile-brand" href="#/"
+          ><img
+            src="/assets/icon.svg"
+            width="33"
+            height="33"
+            alt=""
+          />养鹅计划</a
+        ><span class="desktop-kicker">个人投资研究台 <span>/</span> V2</span>
+        <div class="top-actions">
+          <button
+            class="icon-button"
+            id="data-status-button"
+            data-dialog="status"
+            aria-label="查看数据状态"
+          >
+            <span class="status-led"></span
+            ><span class="status-word">数据状态</span></button
+          ><button
+            class="icon-button"
+            data-dialog="settings"
+            aria-label="打开功能预留设置"
+          >
+            <span id="settings-icon"></span></button
+          ><span class="avatar" aria-label="测试用户">鹅</span>
+        </div>
+      </header>
+      <main id="main" tabindex="-1"></main>
+      <footer class="page-footer">
+        只读接口基础版 <span>·</span> 全部账户和行情为虚构测试，不使用演示资产计算
+      </footer>
+    </div>
+    <nav class="bottom-nav" aria-label="手机导航"></nav>
+    <dialog id="app-dialog" aria-labelledby="dialog-title">
+      <div class="dialog-top">
+        <span class="eyebrow">养鹅计划 · 只读测试</span
+        ><button class="icon-button" id="close-dialog" aria-label="关闭弹窗">
+          ×
+        </button>
+      </div>
+      <div id="dialog-content"></div>
+    </dialog>
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <noscript
+      ><p class="noscript">
+        请在浏览器中启用 JavaScript 来使用四页交互原型。这里没有真实行情或账户。
+      </p></noscript
+    >
+  </body>
+</html>
