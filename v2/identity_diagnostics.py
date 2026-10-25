@@ -4,6 +4,8 @@ No asset access, persistence, identity normalization, or raw diagnostic output.
 """
 import ipaddress
 
+DIAGNOSTIC_PROTOCOL = 3
+
 WHOIS_CODES = frozenset('''whois_document_type whois_node_missing whois_node_type
 whois_profile_missing whois_profile_type
 whois_stable_id_missing whois_stable_id_type whois_stable_id_mismatch

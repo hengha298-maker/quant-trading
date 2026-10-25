@@ -153,7 +153,7 @@ class ConnectionControlTests(unittest.TestCase):
             panel.wait(lambda: owner.completed.is_set() and '完整固定码可复制' in panel.status())
             panel.button('复制诊断码（仅固定代码）').invoke()
             copied = panel.app.clipboard_get()
-            self.assertEqual(copied, '\n'.join(diagnostic_code(code) for code in results))
+            self.assertEqual(copied, '\n'.join((launcher.BUILD_CODE, *(diagnostic_code(code) for code in results))))
             self.assertGreater(len(copied.splitlines()), 1)
             for private in ('PRIVATE', AUTHORITY, '01234567', 'Cookie', 'https://'):
                 self.assertNotIn(private, copied)
@@ -172,8 +172,9 @@ class ConnectionControlTests(unittest.TestCase):
             previous.release.set(); panel.wait(previous.completed.is_set); panel.settle()
             self.assertEqual(panel.status(), expected_status)
             self.assertEqual(panel.url(), expected_url)
-            panel.button('复制诊断码（仅固定代码）').invoke()
             self.assertEqual(panel.app.clipboard_get(), 'UNCHANGED_TEST_SENTINEL')
+            panel.button('复制诊断码（仅固定代码）').invoke()
+            self.assertEqual(panel.app.clipboard_get(), launcher.BUILD_CODE + '\ndiag_no_result')
             self.assertIsNotNone(current.server); self.assertEqual(starts[0], starts[1])
         self.run_panel(scenario, results=('phone_identity_rejected',))
 

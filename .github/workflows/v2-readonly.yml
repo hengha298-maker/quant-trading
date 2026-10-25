@@ -59,6 +59,10 @@ jobs:
         run: python -m unittest discover -s v2/tests -p test_identity_trace_history.py -v
       - name: Native owner sees all identity blockers without another phone test
         run: python -m unittest discover -s v2/tests -p test_identity_owner_controls.py -v
+      - name: Diagnostic runtime protocol rejects mixed components
+        run: python -m unittest discover -s v2/tests -p test_runtime_diagnostic_protocol.py -v
+      - name: Build marker and fresh clipboard for empty or pending diagnostics
+        run: python -m unittest discover -s v2/tests -p test_diagnostic_copy.py -v
       - name: Original demo cache
         run: node v2/tests/sw.test.cjs
       - name: Readonly contract and mode isolation

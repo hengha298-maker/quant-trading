@@ -21,12 +21,16 @@ import time
 from readonly_server import create_server, create_private_server
 from connection_diagnostics import CONNECTION_CODES, RequestTrace, check_local_https
 from identity_diagnostics import WHOIS_CODES, identity_failures as diagnose_identity
+import identity_diagnostics as identity_contract
 
 HTTPS_PORT = 8443
+DIAGNOSTIC_PROTOCOL = 3
+BUILD_CODE = 'diagnostics_identity_v3'
 REQUEST_CODES = frozenset('''proxy_request_arrived proxy_xff_missing
 proxy_xff_duplicate proxy_xff_invalid proxy_xff_not_selected
 proxy_login_missing proxy_login_duplicate proxy_login_mismatch
-identity_preflight_failed'''.split())
+identity_preflight_failed diagnostics_identity_v3 diag_no_result
+diag_check_in_progress diagnostic_component_mismatch'''.split())
 
 # Only these literals may cross the diagnostic boundary. Never stringify CLI
 # output, an exception, a path, a URL, an identity, or a request into a diagnostic.
@@ -63,6 +67,12 @@ class TailnetError(ValueError):
 
 def _fail(code):
     raise TailnetError(code) from None
+
+
+def validate_diagnostic_components():
+    protocol = getattr(identity_contract, 'DIAGNOSTIC_PROTOCOL', None)
+    if type(protocol) is not int or protocol != DIAGNOSTIC_PROTOCOL:
+        _fail('diagnostic_component_mismatch')
 
 
 def _not_expired(value):
@@ -454,6 +464,7 @@ class PhoneShare:
             _fail(reason)
 
     def start(self, p1_code, device, *, scenario='normal', snapshot_file=None, market_files=None):
+        validate_diagnostic_components()
         with self.lock:
             if self.server or self.process:
                 _fail('already_running')

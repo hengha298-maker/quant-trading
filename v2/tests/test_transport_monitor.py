@@ -143,7 +143,7 @@ class Status104Tests(unittest.TestCase):
             picker = next(w for w in widgets(app) if isinstance(w, ttk.Combobox) and w.cget('width') == 80)
             wait_for(lambda: len(picker.cget('values')) > 0); picker.current(0)
             button('启动分享').invoke(); wait_for(lambda: len(starts) == 1 and str(button('启动分享').cget('state')) == 'normal')
-            button('复制诊断码（仅固定代码）').invoke(); self.assertEqual(app.clipboard_get(), 'device_offline')
+            button('复制诊断码（仅固定代码）').invoke(); self.assertEqual(app.clipboard_get(), launcher.BUILD_CODE + '\ndevice_offline')
             button('启动分享').invoke(); wait_for(lambda: len(starts) == 2 and str(button('启动分享').cget('state')) == 'normal')
             self.assertEqual(starts[0], starts[1]); app.destroy()
         with patch.object(tk.Tk, 'mainloop', loop), patch.object(launcher, 'Tailscale', FakeCLI), patch.object(launcher, 'PhoneShare', Share), \

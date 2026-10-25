@@ -82,7 +82,7 @@ class IdentityOwnerControlsTests(unittest.TestCase):
                 wait(lambda: len(starts) == count and url() == '已停止' and str(button('启动分享').cget('state')) == 'normal')
                 button('复制诊断码（仅固定代码）').invoke()
                 copied = app.clipboard_get()
-                self.assertEqual(copied, '\n'.join(failures))
+                self.assertEqual(copied, '\n'.join((launcher.BUILD_CODE, *failures)))
                 for secret in ('PRIVATE_', 'https://', 'Cookie', '01234567'):
                     self.assertNotIn(secret, copied)
                 self.assertIsNone(instances[-1].server)

@@ -4,7 +4,20 @@ import os
 from pathlib import Path
 import threading
 
-from tailscale_transport import PhoneShare, TailnetError, Tailscale, diagnostic_code, device_check_failure, WHOIS_CODES
+from tailscale_transport import PhoneShare, TailnetError, Tailscale, diagnostic_code, device_check_failure, WHOIS_CODES, BUILD_CODE
+
+DIAGNOSTIC_PROTOCOL = 3
+
+
+def format_diagnostic(codes=()):
+    """Every copied result identifies this build and contains fixed codes only."""
+    if codes is None:
+        codes = ()
+    elif isinstance(codes, str):
+        codes = codes.splitlines()
+    safe = tuple(dict.fromkeys(diagnostic_code(code) for code in codes))
+    details = tuple(code for code in safe if code != BUILD_CODE)
+    return '\n'.join((BUILD_CODE, *(details or ('diag_no_result',))))
 
 MESSAGES = {
     'operation_failed': '请检查选定P1源码及JSON（同一已确认本地数据目录、格式有效），未建立分享。',
@@ -97,13 +110,13 @@ def main(*, real=False):
         from tkinter import filedialog, messagebox, ttk
     except ImportError:
         print('无法打开控制窗口；请查看PHONE-HTTPS.md。'); return 1
-    app = tk.Tk(); app.title('养鹅计划 · iPhone真实持仓只读' if real else '养鹅计划 · iPhone安全连接 · 仅虚构测试')
+    app = tk.Tk(); app.title(('养鹅计划 · iPhone真实持仓只读' if real else '养鹅计划 · iPhone安全连接 · 仅虚构测试') + ' · ' + BUILD_CODE)
     app.geometry('760x580')
     events = queue.Queue(); share = None; devices = {}; busy = False; closed = False; checking = False
     device = tk.StringVar(); scenario = tk.StringVar(value='正常历史快照')
     status = tk.StringVar(value='先连接两端Tailscale，再刷新并选择本次唯一授权的iPhone。')
     url = tk.StringVar(value='尚未启动'); code = tk.StringVar(value='未生成')
-    diagnostic = tk.StringVar(value='')
+    diagnostic = tk.StringVar(value=format_diagnostic())
     chosen = {'code': None, 'snapshot': None, 'markets': []}
     scenarios = {'正常历史快照': 'normal', '缺少行情': 'missing', '数据过期': 'stale'}
     body = ttk.Frame(app, padding=22); body.pack(fill='both', expand=True)
@@ -123,6 +136,7 @@ def main(*, real=False):
         nonlocal busy
         if busy or closed: return
         busy = True
+        diagnostic.set(format_diagnostic())
         for button in buttons: button.configure(state='disabled')
         status.set('正在检查私网状态，请稍候。')
         def run():
@@ -179,14 +193,18 @@ def main(*, real=False):
             status.set('已复制不含凭据的地址；可发送到自己的iPhone，用Safari打开。配对码另在本窗口查看。')
 
     def copy_diagnostic():
-        if diagnostic.get():
-            app.clipboard_clear(); app.clipboard_append('\n'.join(diagnostic_code(code) for code in diagnostic.get().splitlines()))
+        current = format_diagnostic(diagnostic.get())
+        diagnostic.set(current)
+        # Always replace the clipboard, even before the first result. Leaving
+        # an old result there would make an older process look like this build.
+        app.clipboard_clear(); app.clipboard_append(current)
 
     def check_connection():
         nonlocal checking
         if checking or busy or not share or not share.server:
             return
         checking = True; owner = share
+        diagnostic.set(format_diagnostic(('diag_check_in_progress',)))
         status.set('正在自动检查whois、本机DNS/TCP/HTTPS。请在iPhone Safari刷新一次；停止按钮仍可使用。')
         def run():
             try: result = owner.check_connection()
@@ -237,7 +255,7 @@ def main(*, real=False):
                     owner, codes = result
                     if share is owner and owner.server and not busy:
                         safe = tuple(diagnostic_code(code) for code in codes)
-                        diagnostic.set('\n'.join(safe)); status.set(connection_message(safe))
+                        diagnostic.set(format_diagnostic(safe)); status.set(connection_message(safe))
                     continue
                 busy = False
                 for button in buttons: button.configure(state='normal')
@@ -245,7 +263,7 @@ def main(*, real=False):
                     key = result[1] if isinstance(result, tuple) else error
                     details = getattr(share, 'identity_report', ()) if task == 'start' else ()
                     safe = tuple(dict.fromkeys(diagnostic_code(item) for item in (key, *details)))
-                    diagnostic.set('\n'.join(safe)); status.set(error_message(key))
+                    diagnostic.set(format_diagnostic(safe)); status.set(error_message(key))
                     if task == 'start': url.set('已停止'); code.set('已撤销')
                 elif task == 'refresh':
                     previous = devices.get(device.get())
@@ -254,7 +272,7 @@ def main(*, real=False):
                     status.set('请选择并核对本次授权iPhone。' if devices else '没有同账号在线iPhone。请在手机打开Tailscale并连接后刷新。')
                 elif task == 'start':
                     if share and share.server and share.gate.ready:
-                        diagnostic.set('')
+                        diagnostic.set(format_diagnostic())
                         url.set(result); code.set(share.server.access.pair_code)
                         status.set(('真实持仓只读分享已启动。' if real else '虚构HTTPS已启动。') + '用指定iPhone的Safari打开地址，输入配对码。')
                     else:
@@ -269,7 +287,7 @@ def main(*, real=False):
             code.set('已撤销'); url.set('已停止')
             details = getattr(share, 'identity_report', ())
             safe = tuple(dict.fromkeys(diagnostic_code(item) for item in (share.error, *details)))
-            diagnostic.set('\n'.join(safe))
+            diagnostic.set(format_diagnostic(safe))
             status.set(error_message(share.error) + ('' if share.stop_confirmed else ' [stop_unconfirmed] 请退出Windows Tailscale以确认断开。'))
         app.after(150, pump)
 
