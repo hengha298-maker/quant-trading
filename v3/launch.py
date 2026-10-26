@@ -21,7 +21,7 @@ except ImportError:
     from serve import HOST, PORT, make_server
 
 TAILSCALE = Path(r"C:\Program Files\Tailscale\tailscale.exe")
-HTTPS_PORT = 10000
+HTTPS_PORT = 10001
 LOCAL_URL = f"http://{HOST}:{PORT}/"
 PROXY_TARGET = f"http://{HOST}:{PORT}"
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
@@ -56,7 +56,7 @@ def tailscale_json(*arguments: str) -> dict:
 
 
 def other_routes(configuration: dict) -> dict:
-    """Canonical snapshot excluding only this launcher's 10000 route and ETag."""
+    """Canonical snapshot excluding only this launcher's 10001 route and ETag."""
     result = {}
     for key, value in configuration.items():
         if key == 'ETag':
@@ -138,13 +138,13 @@ class Launcher:
         self.busy = False
         self.phone_url = tk.StringVar(value="尚未开启手机安装服务")
         self.status = tk.StringVar(value="正在启动仅本机可访问的 V3 页面……")
-        root.title("养鹅计划 V3.1 · 投资决策开发版")
+        root.title("养鹅计划 V3.2 · 独立量化研究")
         root.geometry("670x520")
         root.minsize(600, 480)
         frame = ttk.Frame(root, padding=22)
         frame.pack(fill="both", expand=True)
-        ttk.Label(frame, text="养鹅计划 V3", font=("Microsoft YaHei UI", 21, "bold")).pack(anchor="w")
-        ttk.Label(frame, text="手机独立记账 · 数据只保存在当前设备", font=("Microsoft YaHei UI", 11)).pack(anchor="w", pady=(3, 16))
+        ttk.Label(frame, text="养鹅计划 V3.2", font=("Microsoft YaHei UI", 21, "bold")).pack(anchor="w")
+        ttk.Label(frame, text="独立研究工作区 · 历史研究不执行交易", font=("Microsoft YaHei UI", 11)).pack(anchor="w", pady=(3, 16))
         ttk.Button(frame, text="打开电脑页面", command=self.open_computer).pack(fill="x", ipady=7)
         self.share_button = ttk.Button(frame, text="开启 iPhone 首次安装服务", command=self.start_share)
         self.share_button.pack(fill="x", pady=8, ipady=7)

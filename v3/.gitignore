@@ -8,3 +8,8 @@ backups/
 *.db
 *.log
 .env*
+
+# Explicit local research exports; never user wealth or committed market datasets.
+web/research-report-v32.json
+web/research-report-v31.json
+web/research-report-*.pending

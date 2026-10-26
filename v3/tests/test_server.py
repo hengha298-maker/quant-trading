@@ -136,7 +136,7 @@ class RoutingTests(unittest.TestCase):
         old={'Foreground':{'old-session':{'TCP':{'8443':{'HTTPS':True}},'Web':{'fixture.ts.net:8443':{'Handlers':{'/':{'Proxy':'http://127.0.0.1:1234'}}}}}}}
         import copy
         current=copy.deepcopy(old)
-        current['Foreground']['new-session']={'TCP':{'10000':{'HTTPS':True}},'Web':{'fixture.ts.net:10000':{'Handlers':{'/':{'Proxy':'http://127.0.0.1:9393'}}}}}
+        current['Foreground']['new-session']={'TCP':{'10001':{'HTTPS':True}},'Web':{'fixture.ts.net:10001':{'Handlers':{'/':{'Proxy':'http://127.0.0.1:9394'}}}}}
         current['ETag']='updated'
         self.assertEqual(other_routes(old),other_routes(current))
         current['Foreground']['old-session']['TCP']['8443']['HTTPS']=False
@@ -148,19 +148,19 @@ class RoutingTests(unittest.TestCase):
 
     def test_occupied_port_in_nested_foreground_config_is_detected(self):
         self.assertFalse(port_in_use({"TCP": {"443": {"HTTPS": True}}}))
-        self.assertTrue(port_in_use({"TCP": {"10000": {"HTTPS": True}}}))
-        self.assertTrue(port_in_use({"Foreground": {"fictional-session": {"Web": {"goose.example.ts.net:10000": {}}}}}))
-        self.assertTrue(port_in_use({"AllowFunnel": {"goose.example.ts.net:10000": True}}))
+        self.assertTrue(port_in_use({"TCP": {"10001": {"HTTPS": True}}}))
+        self.assertTrue(port_in_use({"Foreground": {"fictional-session": {"Web": {"goose.example.ts.net:10001": {}}}}}))
+        self.assertTrue(port_in_use({"AllowFunnel": {"goose.example.ts.net:10001": True}}))
 
     def test_only_expected_https_loopback_proxy_is_accepted(self):
-        route = {"TCP": {"10000": {"HTTPS": True}}, "Web": {"goose.example.ts.net:10000": {"Handlers": {"/": {"Proxy": "http://127.0.0.1:9393"}}}}}
+        route = {"TCP": {"10001": {"HTTPS": True}}, "Web": {"goose.example.ts.net:10001": {"Handlers": {"/": {"Proxy": "http://127.0.0.1:9394"}}}}}
         self.assertTrue(route_is_ours(route, "goose.example.ts.net"))
         self.assertTrue(route_is_ours({"Foreground": {"fictional": route}}, "goose.example.ts.net"))
         self.assertFalse(route_is_ours(route, "different.example.ts.net"))
-        route["AllowFunnel"] = {"goose.example.ts.net:10000": True}
+        route["AllowFunnel"] = {"goose.example.ts.net:10001": True}
         self.assertFalse(route_is_ours(route, "goose.example.ts.net"))
         route.pop("AllowFunnel")
-        route["Web"]["goose.example.ts.net:10000"]["Handlers"]["/"]["Proxy"] = "http://127.0.0.1:9999"
+        route["Web"]["goose.example.ts.net:10001"]["Handlers"]["/"]["Proxy"] = "http://127.0.0.1:9999"
         self.assertFalse(route_is_ours(route, "goose.example.ts.net"))
 
     def test_dns_comes_only_from_own_running_status(self):
