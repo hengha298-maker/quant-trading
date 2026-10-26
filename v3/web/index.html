@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#163f39">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="description" content="养鹅计划 V3.1：本地优先的投资研究、资产快照与资金规划。">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="apple-touch-icon" href="./icons/icon-192.png">
+  <link rel="icon" href="./icons/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./styles.css">
+  <title>养鹅计划 · V3.1</title>
+</head>
+<body>
+  <a class="skip-link" href="#main">跳到内容</a>
+  <div class="app-shell">
+    <header class="app-header">
+      <a class="brand" href="#overview" aria-label="养鹅计划首页"><span class="brand-mark" aria-hidden="true">鹅</span><span>养鹅计划<small>V3.1 · 投资与资金安排</small></span></a>
+      <span class="privacy-badge"><span aria-hidden="true">●</span> 仅存本机</span>
+    </header>
+    <div class="status-line" role="status" aria-live="polite"><span id="network-status">检查网络…</span><span id="offline-status">准备离线资源…</span></div>
+    <div id="global-warning" class="notice warning hidden" role="alert"></div>
+    <main id="main" tabindex="-1">
+      <section id="page-overview" class="page" aria-labelledby="overview-title">
+        <div class="page-heading"><div><p class="eyebrow" id="today-label"></p><h1 id="overview-title">投资有据，决策有数</h1></div><button class="icon-button" type="button" id="refresh-overview" aria-label="刷新总览">↻</button></div>
+        <div id="investment-research"></div>
+        <div id="investment-overview"></div>
+        <div id="allocation-plans"></div>
+        <div class="investment-ledger-divider"><span>辅助账本</span><p>以下为原有账户与流水推算，独立于手工资产快照，不相加。</p></div>
+        <div id="empty-overview" class="onboarding hidden"><div class="onboarding-art" aria-hidden="true">◒</div><h2>从一个账户开始</h2><p>旧账本为可选辅助。也可只在上方更新资产快照，不必每日记录收支。未知余额可以留空。</p><button class="primary" type="button" data-action="new-account">添加第一个账户</button><button class="text-button" type="button" id="demo-overview">先用虚构数据体验</button></div>
+        <div class="net-card"><div class="card-top"><span>净资产</span><span class="currency-label">人民币 CNY</span></div><p class="hero-money" id="net-worth">—</p><p id="net-worth-note" class="card-note"></p><div class="asset-split"><div><span>总资产</span><strong id="total-assets">—</strong></div><div><span>总负债</span><strong id="total-liabilities">—</strong></div></div></div>
+        <div class="section-heading"><h2>本月收支</h2><label class="compact-label"><span class="sr-only">统计月份</span><input type="month" id="overview-month" aria-label="统计月份"></label></div>
+        <div class="month-grid"><article class="metric-card"><span>收入</span><strong id="month-income">—</strong></article><article class="metric-card"><span>支出</span><strong id="month-expense">—</strong></article><article class="metric-card"><span>净结余</span><strong id="month-surplus">—</strong></article></div>
+        <p class="helper">账户转账、投资买卖与还款本金不计入普通收支；还款利息计入支出。</p>
+        <article class="panel"><div class="section-heading"><h2>净资产足迹</h2><span class="subtle">按记录日期</span></div><div id="history-chart" class="history-chart"></div><details class="history-details"><summary>查看历史数值</summary><div id="history-table"></div></details><p class="helper">仅展示已记录的余额变化；没有实时估值。未知账户会使总额保持未知。</p></article>
+        <article class="panel"><div class="section-heading"><h2>最近记录</h2><button class="text-button" type="button" data-tab="entries">全部流水 →</button></div><div id="recent-entries"></div></article>
+      </section>
+      <section id="page-assets" class="page hidden" aria-labelledby="assets-title">
+        <div class="page-heading"><div><p class="eyebrow">看清家底</p><h1 id="assets-title">资产与负债</h1></div><button class="secondary" type="button" data-action="new-account">＋ 账户</button></div>
+        <div id="snapshot-list"></div>
+        <div class="investment-ledger-divider"><span>原有账户与历史持仓</span><p>保留完整账本；P1 历史数量不用于实时估值。</p></div>
+        <p class="helper">证券账户填包含持仓的账户总额。导入的历史持仓单独参考，不重复计入资产。</p>
+        <div class="filter-row"><label class="toggle-label"><input type="checkbox" id="show-archived"> 显示已归档账户</label><span id="account-count" class="subtle"></span></div>
+        <div id="account-list" class="account-list"></div>
+        <article class="panel"><div class="section-heading"><h2>P1 历史持仓</h2><button class="text-button" type="button" id="import-p1-button">手动导入 →</button></div><p class="helper">历史快照仅作数量与来源参考。成本、现金与当前市值不会由历史行情推算。</p><div id="position-list"></div></article>
+      </section>
+      <section id="page-entries" class="page hidden" aria-labelledby="entries-title">
+        <div class="page-heading"><div><p class="eyebrow">每一笔都有来处</p><h1 id="entries-title">收支流水</h1></div><button class="secondary" type="button" data-action="new-entry">＋ 记一笔</button></div>
+        <div class="search-box"><label for="entry-search" class="sr-only">搜索备注、分类和账户</label><input type="search" id="entry-search" placeholder="搜索备注、分类、账户…" autocomplete="off"></div>
+        <div class="filter-row entry-filters"><label><span class="sr-only">流水类型</span><select id="entry-filter-kind"><option value="">全部类型</option><option value="income">收入</option><option value="expense">支出</option><option value="transfer">转账</option><option value="adjustment">余额调整</option><option value="repayment">负债还款</option><option value="buy">投资买入</option><option value="sell">投资卖出</option><option value="dividend">分红</option></select></label><label><span class="sr-only">开始日期</span><input type="date" id="entry-filter-from" aria-label="开始日期"></label><span class="subtle">至</span><label><span class="sr-only">结束日期</span><input type="date" id="entry-filter-to" aria-label="结束日期"></label></div>
+        <label class="toggle-label"><input type="checkbox" id="show-voided"> 显示已撤销记录</label><div id="entries-count" class="list-caption"></div><div id="entry-list"></div>
+      </section>
+      <section id="page-settings" class="page hidden" aria-labelledby="settings-title">
+        <div class="page-heading"><div><p class="eyebrow">让记录安心留存</p><h1 id="settings-title">设置与备份</h1></div></div>
+        <div class="notice warning"><strong>本机存储不等于永久备份</strong><p>iOS 或浏览器可能清理网站数据；卸载、清除浏览记录、设备丢失也可能导致记录丢失。请定期导出加密备份，独立保存文件并记住密码。</p><p>本机账本未单独加密，请使用设备锁；密码加密用于导出的备份文件。</p></div>
+        <article class="panel"><h2>完整加密备份</h2><p class="helper">导出资产快照、工资计划、研究报告、关注池及原账户、流水、历史持仓与数据版本。文件只在本机生成，不自动上传。密码无法找回。</p><label class="field">备份密码（至少 12 个字符）<input type="password" id="backup-password" minlength="12" autocomplete="new-password" placeholder="请使用独立长密码"></label><label class="field">再次输入密码<input type="password" id="backup-password-repeat" autocomplete="new-password"></label><button class="primary wide" type="button" id="export-backup">导出加密备份</button><p id="backup-status" class="helper" role="status">尚未在本次打开中导出备份。</p></article>
+        <article class="panel"><h2>从备份恢复</h2><p class="helper">先验证并显示冲突，再由你选择合并或替换。不会静默覆盖当前记录。</p><label class="field">选择养鹅加密备份<input type="file" id="restore-file" accept=".json,.goose,application/json"></label><label class="field">该备份的密码<input type="password" id="restore-password" autocomplete="current-password"></label><button class="secondary wide" type="button" id="preview-restore">验证并预览</button><div id="restore-preview" class="hidden inset-panel"><div id="restore-summary"></div><p id="restore-conflicts" class="helper"></p><button class="primary wide" type="button" id="merge-restore">合并无冲突记录</button><p class="helper">要完全替换当前数据，请先在上方导出当前数据。本次数据变动后须重新备份。</p><label class="toggle-label"><input type="checkbox" id="replace-confirm"> 我理解替换将移除当前记录，选择以备份为准</label><button class="danger-button wide" type="button" id="replace-restore">用备份完整替换</button></div></article>
+        <article class="panel"><h2>本机与离线</h2><div id="storage-info" class="helper">正在读取本机存储状态…</div><button class="secondary" type="button" id="request-persistence">请求持久存储</button><div class="divider"></div><h3>iPhone 首次使用</h3><ol class="install-list"><li>用 Safari 在线打开本应用，点“分享”→“添加到主屏幕”。</li><li>从主屏幕图标在线打开一次，等待顶部显示“离线就绪”，再开始正式记录。</li><li>关闭网络、退出再打开，添加一笔虚构记录并重开确认；导出备份后再删除测试记录。</li></ol><p class="helper">Safari 标签和主屏幕应用的数据可能彼此独立。Safari 已有记录须先导出，再在主屏幕应用中导入。离线仅指本机；Windows 双向同步尚未实现。</p><p class="helper">此版本不连接券商，不自动交易，不提供实时价格或投资建议。</p><button class="text-button hidden" type="button" id="apply-update">有新版本，重新打开应用</button></article>
+        <article class="panel"><h2>虚构体验数据</h2><p class="helper">仅可在空账本中添加，所有名称与数字均为虚构。不会读取 V2/P1 原目录；已有投资快照、计划或关注时不会覆盖。</p><button class="secondary" type="button" id="load-demo">在空账本中添加虚构数据</button><p class="version-label">Goose V3.1 · 本地优先 · schema <span id="schema-version">—</span></p></article>
+      </section>
+    </main>
+    <button class="quick-add investment-quick-ledger" type="button" id="quick-add" aria-label="快速记一笔"><span aria-hidden="true">＋</span><span>记流水</span></button>
+    <nav class="bottom-nav" aria-label="主导航"><button type="button" data-tab="overview" aria-current="page"><span aria-hidden="true">◒</span>决策</button><button type="button" data-tab="assets"><span aria-hidden="true">▣</span>资产</button><button type="button" data-tab="entries"><span aria-hidden="true">≡</span>流水</button><button type="button" data-tab="settings"><span aria-hidden="true">⚙</span>设置</button></nav>
+  </div>
+  <dialog id="account-dialog" aria-labelledby="account-dialog-title"><form id="account-form"><div class="dialog-heading"><h2 id="account-dialog-title">添加账户</h2><button class="icon-button" type="button" data-close="account-dialog" aria-label="关闭">×</button></div><input type="hidden" name="id"><label class="field">账户名称<input name="name" required maxlength="100" placeholder="例如：工资卡、房贷" autocomplete="off"></label><label class="field">账户类型<select name="type"><option value="bank">银行账户</option><option value="cash">支付宝 / 其他现金</option><option value="securities">股票证券账户</option><option value="fund">基金账户</option><option value="other">其他资产</option><option value="loan">借款负债</option><option value="credit">信用卡负债</option></select></label><label class="field"><span id="account-balance-label">初始余额（元，可留空表示未知）</span><input name="openingBalance" inputmode="decimal" placeholder="未知请留空" autocomplete="off"></label><label class="field">余额记录日期<input name="openingDate" type="date" required></label><label class="field" id="annual-rate-field">年利率（%，可留空）<input name="annualRate" inputmode="decimal" placeholder="例如 3.5" autocomplete="off"></label><label class="field">备注（可选）<textarea name="note" rows="2" maxlength="2000"></textarea></label><p class="helper">修改初始余额会重新计算历史。日常余额变化请用“余额调整”留痕；证券账户总额应包含其持仓，避免重复计算。</p><p id="account-error" class="form-error" role="alert"></p><button class="primary wide" type="submit">保存账户</button><button class="text-button danger-text hidden wide" id="archive-account" type="button">归档账户，保留历史记录</button></form></dialog>
+  <dialog id="entry-dialog" aria-labelledby="entry-dialog-title"><form id="entry-form"><div class="dialog-heading"><h2 id="entry-dialog-title">快速记一笔</h2><button class="icon-button" type="button" data-close="entry-dialog" aria-label="关闭">×</button></div><input type="hidden" name="id"><label class="field">记录类型<select name="kind" id="entry-kind"><option value="expense">支出</option><option value="income">收入</option><option value="transfer">账户转账</option><option value="adjustment">余额调整</option><option value="repayment">负债还款</option><option value="buy">投资买入</option><option value="sell">投资卖出</option><option value="dividend">投资分红</option></select></label><label class="field amount-field"><span id="entry-amount-label">金额（元）</span><input name="amount" inputmode="decimal" required placeholder="0.00" autocomplete="off"></label><label class="field"><span id="entry-account-label">付款账户</span><select name="accountId" required></select></label><label class="field hidden" id="entry-to-field"><span id="entry-to-label">转入账户</span><select name="toAccountId"></select></label><div class="two-fields hidden" id="repayment-fields"><label class="field">归还本金（元）<input name="principal" inputmode="decimal" placeholder="0.00" autocomplete="off"></label><label class="field">支付利息（元）<input name="interest" inputmode="decimal" placeholder="0.00" autocomplete="off"></label></div><label class="field">日期<input name="date" type="date" required></label><details class="extra-details"><summary>备注与分类（可选）</summary><label class="field">备注<textarea name="note" rows="2" maxlength="2000" placeholder="例如：午餐"></textarea></label><label class="field">分类<input name="category" maxlength="100" placeholder="例如：餐饮、工资" autocomplete="off"></label></details><p id="entry-kind-help" class="helper"></p><p id="entry-error" class="form-error" role="alert"></p><button class="primary wide" type="submit">保存记录</button><button class="text-button danger-text hidden wide" id="void-entry" type="button">撤销这笔记录，保留痕迹</button></form></dialog>
+  <dialog id="account-detail-dialog" aria-labelledby="account-detail-title"><div class="dialog-heading"><h2 id="account-detail-title"></h2><button class="icon-button" type="button" data-close="account-detail-dialog" aria-label="关闭">×</button></div><p id="account-detail-balance" class="detail-money"></p><p id="account-detail-note" class="helper"></p><div class="button-row"><button class="primary" type="button" id="adjust-account">记录余额调整</button><button class="secondary" type="button" id="edit-account">编辑账户</button></div><h3>余额历史</h3><div id="account-history"></div></dialog>
+  <dialog id="p1-dialog" aria-labelledby="p1-dialog-title"><div class="dialog-heading"><h2 id="p1-dialog-title">导入 P1 历史快照</h2><button class="icon-button" type="button" data-close="p1-dialog" aria-label="关闭">×</button></div><p class="helper">只读取你选择的 JSON 文件，绝不写回 P1。持仓仅作历史参考，不纳入账户总额，也不据此推算成本或实时市值。</p><label class="field">选择历史持仓快照<input type="file" id="p1-file" accept=".json,application/json"></label><button class="secondary wide" type="button" id="preview-p1">读取并检查重复</button><div id="p1-preview" class="hidden inset-panel"></div><p id="p1-error" class="form-error" role="alert"></p><button class="primary wide hidden" type="button" id="confirm-p1">确认导入历史参考</button></dialog>
+  <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+  <noscript><p class="notice warning">此应用需要 JavaScript 才能在本机保存数据。请启用后重新打开。</p></noscript>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
