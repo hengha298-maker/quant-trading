@@ -13,9 +13,11 @@ import re
 from urllib.parse import unquote, urlsplit
 
 HOST = "127.0.0.1"
-PORT = 9393
+PORT = 9394
 WEB_ROOT = Path(__file__).resolve().parent / "web"
 RESOURCES = {
+    "research-report-v32.json": "application/json; charset=utf-8",
+    "research-report-v31.json": "application/json; charset=utf-8",
     "index.html": "text/html; charset=utf-8",
     "app.js": "text/javascript; charset=utf-8",
     "styles.css": "text/css; charset=utf-8",

@@ -1,9 +1,9 @@
 import { parseMoney, formatMoney } from './domain.js';
 import { parseJsonStrict } from './io.js';
-import { emptyPlanning, latestSnapshot, snapshotTotals, saveSnapshot, voidSnapshot, addWatch, removeWatch, saveReport, reportAssessment, calculateAllocation, saveSalaryPlan, confirmSalaryReceipt, buildReviewPackage, buildDailyDecision } from './planning.js';
+import { emptyPlanning, latestSnapshot, snapshotTotals, saveSnapshot, voidSnapshot, addWatch, removeWatch, saveReport, reportAssessment, calculateAllocation, saveSalaryPlan, confirmSalaryReceipt, buildReviewPackage, buildDailyDecision, researchComparison } from './planning.js';
 
 const TYPES = { bank: '银行存款', cash: '现金 / 支付账户', securities: '证券账户总额', fund: '基金账户', other: '其他资产', loan: '借款负债', credit: '信用卡负债' };
-const STANCES = { hold: '持有', watch: '观察', accumulate: '分批买入', reduce: '减仓' };
+const STANCES = { hold: '持有', watch: '观察', accumulate: '分批买入研究', reduce: '分批减仓研究' };
 const QUALITY = { low: '低', medium: '中', high: '高' };
 const $ = id => document.getElementById(id);
 const n = (tag, cls, text) => { const el = document.createElement(tag); if (cls) el.className = cls; if (text !== undefined && text !== null) el.textContent = String(text); return el; };
@@ -234,56 +234,129 @@ export function mountInvestment({ getState, commit, info, today }) {
     if (!reportEditor) reportEditor = makeReportDialog();
     reportEditor.open();
   }
+  function loadLocalResearchReport() {
+    if (!reportEditor) reportEditor = makeReportDialog();
+    reportEditor.open();
+    reportEditor.loadLocal();
+  }
   function makeReportDialog() {
     const box = dialog('investment-report-dialog', '导入研究报告');
     const file = field('选择本机报告 JSON', 'investment-report-file', { type: 'file' }); file.input.accept = '.json,application/json';
     const preview = n('div', 'inset-panel hidden'); preview.id = 'investment-report-preview';
     const error = n('p', 'form-error'); error.id = 'investment-report-error'; error.setAttribute('role', 'alert');
+    const loadStatus = n('p', 'helper'); loadStatus.id = 'investment-report-load-status'; loadStatus.setAttribute('role', 'status');
     let pending = null;
+    let requestSequence = 0;
+    let localRequest = null;
+    function resetPreview() { pending = null; preview.classList.add('hidden'); submit.classList.add('hidden'); }
+    async function validatePreview(text, token) {
+      const doc = parseJsonStrict(text);
+      await saveReport(getState(), doc);
+      if (token !== requestSequence || !box.open) return;
+      pending = doc; preview.replaceChildren(...reportDetails(doc, 'import-')); preview.classList.remove('hidden'); submit.classList.remove('hidden');
+    }
     const submit = button('确认保存报告', 'primary wide hidden', async () => {
       try { if (!pending) throw new Error('请先选择并验证报告。'); await commit(await saveReport(getState(), pending), '研究报告已保存；未导入或改动真实持仓。'); box.close(); } catch (issue) { fail(issue, error); }
     }, 'investment-report-confirm');
     const read = button('验证并预览报告', 'secondary wide', async () => {
-      error.textContent = ''; pending = null; submit.classList.add('hidden');
+      error.textContent = ''; resetPreview(); loadStatus.textContent = ''; localRequest?.abort(); const token = ++requestSequence;
       try {
         const selected = file.input.files?.[0];
         if (!selected) throw new Error('请选择报告 JSON。');
         if (selected.size > 8 * 1024 * 1024) throw new Error('报告文件超过 8 MiB。');
-        const doc = parseJsonStrict(await selected.text());
-        await saveReport(getState(), doc);
-        pending = doc; preview.replaceChildren(...reportDetails(doc)); preview.classList.remove('hidden'); submit.classList.remove('hidden');
-      } catch (issue) { fail(issue, error); }
+        await validatePreview(await selected.text(), token);
+      } catch (issue) { if (token === requestSequence) fail(issue, error); }
     }, 'investment-report-preview-button');
-    file.input.addEventListener('change', () => { pending = null; preview.classList.add('hidden'); submit.classList.add('hidden'); });
-    box.append(n('p', 'helper', '只读取你明确选择的报告文件。来源与日期不代表内容已经核实；不扫描磁盘，不调用 AI，不导入真实券商数据。报告仅作研究参考。'), file.wrapper, read, preview, error, submit);
-    return { open() { pending = null; file.input.value = ''; error.textContent = ''; preview.classList.add('hidden'); submit.classList.add('hidden'); box.showModal(); } };
+    file.input.addEventListener('change', () => { requestSequence++; localRequest?.abort(); resetPreview(); loadStatus.textContent = ''; error.textContent = ''; });
+    box.addEventListener('close', () => { requestSequence++; localRequest?.abort(); resetPreview(); });
+    box.append(n('p', 'helper', '只读取你明确选择的文件，或由你点击载入本机生成的公共研究报告。来源与日期不代表内容已经核实；不扫描磁盘，不调用 AI，不导入真实券商数据。预览后仍需确认才保存，不同步个人记录。'), file.wrapper, read, loadStatus, preview, error, submit);
+    return {
+      open() { requestSequence++; localRequest?.abort(); resetPreview(); file.input.value = ''; error.textContent = ''; loadStatus.textContent = ''; if (!box.open) box.showModal(); },
+      async loadLocal() {
+        const token = ++requestSequence; localRequest?.abort(); localRequest = new AbortController();
+        const controller = localRequest;
+        resetPreview(); error.textContent = ''; loadStatus.textContent = '正在读取 Windows 生成的本轮研究报告，尚未保存…';
+        const timer = setTimeout(() => controller.abort(), 15000);
+        let downloaded = false;
+        try {
+          const response = await fetch('./research-report-v32.json', { cache: 'no-store', credentials: 'omit', redirect: 'error', signal: controller.signal, headers: { Accept: 'application/json' } });
+          if (!response.ok) throw new Error('本机研究报告暂不可用');
+          if (Number(response.headers.get('Content-Length') || 0) > 8 * 1024 * 1024) throw new Error('研究报告超过 8 MiB');
+          const text = await response.text(); downloaded = true;
+          if (token !== requestSequence || !box.open) return;
+          await validatePreview(text, token);
+          if (token === requestSequence) loadStatus.textContent = '已载入本机公共行情 / 独立测试账户研究报告。请核对下方来源和数据日期；确认后才保存。未同步个人财富记录。';
+        } catch (issue) {
+          if (token !== requestSequence || !box.open) return;
+          resetPreview(); loadStatus.textContent = '';
+          fail(new Error(downloaded ? `报告校验未通过：${issue.message}。未使用旧报告替代。` : '请在 Windows 先运行研究；离线可导入已下载文件。未使用旧报告替代。'), error);
+        } finally { clearTimeout(timer); if (localRequest === controller) localRequest = null; }
+      },
+    };
   }
 
-  function reportDetails(report) {
+  function reportDetails(report, prefix = '') {
     const assessment = reportAssessment(report, today());
     const out = [n('p', 'investment-report-source', `${report.source} · 数据日期 ${report.asOf} · ${assessment.stale ? '已陈旧，需重新核实' : '仍需独立核实'}`), n('p', 'helper', `策略：${report.strategy} · 生成时间 ${report.generatedAt}`)];
     for (const warning of assessment.warnings || []) out.push(n('p', 'investment-warning', warning));
+    if (report.research) out.push(researchDetails(report, prefix));
     if (!report.signals?.length) out.push(n('p', 'investment-warning', '缺少信号：无法从这份报告形成标的判断。'));
     for (const signal of report.signals || []) {
       const card = n('section', 'investment-signal');
-      card.append(n('h3', '', `${signal.symbol} · ${STANCES[signal.stance] || '未知判断'}`), n('p', 'helper', `证据质量（来源自评，未独立复算）：${QUALITY[signal.quality] || '未知'}。依据：${signal.basis || '缺失'}。`), n('p', 'investment-warning', `风险：${signal.risk || '缺失，不能视为无风险'}`));
+      card.append(n('h3', '', `${signal.symbol} · ${report.research ? '历史研究标签：' : ''}${STANCES[signal.stance] || '未知判断'}`), n('p', 'helper', `证据质量（来源自评，未独立复算）：${QUALITY[signal.quality] || '未知'}。依据：${signal.basis || '缺失'}。`), n('p', 'investment-warning', `风险：${signal.risk || '缺失，不能视为无风险'}`));
       out.push(card);
     }
     const backtest = n('details', 'extra-details'); backtest.append(n('summary', '', '回测证据、费用与局限'));
     if (!report.backtest) backtest.append(n('p', 'investment-warning', '缺少回测数据、手续费与滑点证据，无法据此推断收益。'));
     else {
       const value = report.backtest;
-      backtest.append(n('p', 'helper', `${value.from} 至 ${value.to} · 样本内收益 ${bps(value.returnBps)} · 最大回撤 ${bps(value.maxDrawdownBps)} · ${value.tradeCount} 笔模拟交易`), n('p', 'helper', `佣金 ${bps(value.commissionBps)} · 滑点 ${bps(value.slippageBps)}。历史与回测不保证未来结果。`), n('p', 'investment-warning', `局限：${value.limitations || '未说明'}`));
+      backtest.append(n('p', 'helper', `${value.from} 至 ${value.to} · ${report.research ? '全区间价格路径 TWR' : '来源声明收益'} ${bps(value.returnBps)} · 最大回撤 ${bps(value.maxDrawdownBps)} · ${value.tradeCount} 笔模拟交易`), n('p', 'helper', `佣金 ${bps(value.commissionBps)} · 滑点 ${bps(value.slippageBps)}。历史与回测不保证未来结果。`), n('p', 'investment-warning', `局限：${value.limitations || '未说明'}`));
     }
     out.push(backtest);
-    const trades = n('details', 'extra-details'); trades.append(n('summary', '', `模拟交易历史（${report.paperTrades?.length || 0} 笔）`));
-    if (!report.paperTrades?.length) trades.append(n('p', 'helper', '缺少模拟交易历史；未连接券商。'));
+    const trades = n('details', 'extra-details'); const researchCount=report.research?.comparison.find(x=>x.strategy==='v1_ma20')?.tradeCount; trades.append(n('summary', '', report.research ? `模拟成交详情（研究 ${researchCount ?? '未知'} 笔，逐笔见本机文件）` : `模拟交易历史（${report.paperTrades?.length || 0} 笔）`));
+    if (!report.paperTrades?.length) trades.append(n('p', 'helper', report.research ? '手机报告未嵌入分以下精度的逐笔成交价。各策略完整模拟指令、成交和费用保存在独立 backtest.json；不是零成交，也不是真实券商成交。' : '缺少模拟交易历史；未连接券商。'));
     else for (const trade of report.paperTrades) trades.append(n('p', 'helper', `${trade.date} · ${trade.symbol} · ${trade.side === 'buy' ? '模拟买入' : '模拟卖出'} ${trade.quantity} · 单价 ${money(trade.price)} · 总成本 ${money(trade.totalCost)}`));
     out.push(trades);
-    if (report.notes) out.push(n('p', 'helper', report.notes));
+    if (report.notes) { if(report.research){ const notes=n('details','extra-details');notes.append(n('summary','','报告附注与完整研究口径'),n('p','helper',report.notes));out.push(notes); } else out.push(n('p', 'helper', report.notes)); }
     return out;
   }
-  function bps(value) { return Number.isInteger(value) ? `${value / 100}%` : '未知'; }
+  function bps(value) {
+    if (!Number.isSafeInteger(value)) return '未知';
+    const integer = BigInt(value), absolute = integer < 0n ? -integer : integer;
+    return `${integer < 0n ? '-' : ''}${absolute / 100n}.${String(absolute % 100n).padStart(2, '0')}%`;
+  }
+
+  function researchDetails(report, prefix = '') {
+    const research = report.research, dataset = research.dataset;
+    const root = n('section'); root.dataset.researchVersion = String(research.version);
+    const health = n('div', 'notice warning'); health.id = `${prefix}research-health-banner`; health.setAttribute('role', 'status');
+    const healthTitles = { synthetic: '虚构数据 · 仅验证研究流程', blocked: '数据检查阻断 · 禁止用于决策', validated: '历史数据研究 · 不生成实时交易建议' };
+    health.append(n('strong', '', healthTitles[dataset.quality]), n('p', '', `决策权限：已禁用。${dataset.crossValidated ? '报告声明已交叉核对，本应用未独立复算。' : '单源数据，未完成独立来源交叉核对。'}${dataset.unitVerified ? '' : '价格单位未经核验，不能解释为真实价格。'}`));
+    if (research.health.codes.length) health.append(n('p', '', `诊断码：${research.health.codes.join(' · ')}`));
+    if (research.reportKind === 'pre1445-test') health.append(n('p', '', `14:45 生成流程测试：${research.generatedBeforeCutoff ? '报告声明并通过时间口径检查为中国时间14:45前生成' : '未通过提前生成条件'}；不执行交易。`));
+    root.append(health);
+    const provenance = n('details', 'extra-details'); provenance.id = `${prefix}research-provenance`; provenance.append(n('summary', '', '数据来源、截止日期与价格口径'));
+    provenance.append(n('p', 'helper', `数据来源：${dataset.source}；报告发布来源：${report.source}。两者分别记录，不等同于独立核验。`), n('p', 'helper', `来源网址：${dataset.sourceUrl}`), n('p', 'helper', `数据截止：${dataset.through} · 不复权（none） · 人民币元 / 股或份（CNY-per-share）`), n('p', 'helper', `数据 SHA256：${dataset.sha256}`), n('p', 'helper', '数据指纹用于核对文件身份，不能单独证明价格真实。历史收益为价格研究，不应当作含分红的全收益。'));
+    root.append(provenance);
+    const comparison = n('section', 'inset-panel'); comparison.id = `${prefix}research-comparison`;
+    comparison.append(n('h3', '', '四策略 · 同区间比较'), n('p', 'helper', `共同区间 ${research.split.train.from} 至 ${research.split.test.to}。以买入持有为基准；展开各策略查看年化、回撤、波动、成交与实际模拟费用。`));
+    comparison.append(n('p','helper','价格路径 TWR：扣模拟成本，不含分红；共同资金及注资假设，不是完整含息总回报。'));
+    const names = { buy_hold: '买入持有', v1_ma20: '原 V1 MA20', ma20_cross: 'MA20 穿越', periodic: '定期买入' };
+    for (const item of researchComparison(report)) {
+      const section = n('details', 'extra-details'); section.dataset.strategy = item.strategy;
+      section.append(n('summary', '', `${names[item.strategy]} · 总收益 ${bps(item.totalReturnBps)} · 相对基准 ${bps(item.excessReturnBps).replace('%', ' 个百分点')}`));
+      section.append(row('年化收益', bps(item.annualizedReturnBps)), row('最大回撤', bps(item.maxDrawdownBps)), row('年化波动率', bps(item.volatilityBps)), row('成交次数', item.tradeCount), row('模拟费用合计', money(item.cost)), row('费用相对基准差额', money(item.costDifference)));
+      comparison.append(section);
+    }
+    comparison.append(n('p', 'helper', '费用和费用差额按整数分精确计算。基点差是同区间历史指标之差，不是未来超额收益预测。'));
+    root.append(comparison);
+    const split = n('details', 'extra-details'); split.id = `${prefix}research-split`; split.append(n('summary', '', '训练、验证与测试区间'));
+    for (const [key, title] of [['train', '训练'], ['validation', '验证'], ['test', '测试']]) split.append(row(title, `${research.split[key].from} — ${research.split[key].to}`));
+    split.append(n('p', 'helper', '四策略上方指标覆盖完整共同区间，不能冒充单独测试集表现。分段区间有序、不重叠，未证明未来收益。')); root.append(split);
+    const limitations = n('details', 'extra-details'); limitations.id = `${prefix}research-limitations`; limitations.append(n('summary', '', `研究局限与缺失（${research.limitations.length} 项）`));
+    for (const limitation of research.limitations) limitations.append(n('p', 'investment-warning', limitation));
+    root.append(limitations); return root;
+  }
 
   async function fictionalReport() {
     if (!confirm('将添加一份明确虚构的研究报告，仅用于体验报告与模拟历史展示；不会创建持仓或任何交易。确认？')) return;
@@ -354,6 +427,7 @@ export function mountInvestment({ getState, commit, info, today }) {
 
   function renderResearch() {
     const panelElement = panel('今日研究与决策', button('导入报告', 'text-button', openReportImport, 'open-investment-report'));
+    panelElement.append(button('载入本机研究报告', 'secondary wide', loadLocalResearchReport, 'load-local-research-report'), n('p', 'helper', '仅点击时从本机服务载入本轮公共研究报告，先预览再确认。不自动同步个人数据；离线可使用已导入报告或手动导入下载文件。'));
     const daily = buildDailyDecision(getState(), today());
     const dailyStatus = { missing: '缺少报告', historical: '历史报告待更新', 'source-unverified': '报告来源待核验' };
     const decision = n('div', 'investment-daily-decision'); decision.id = 'daily-decision-summary';
