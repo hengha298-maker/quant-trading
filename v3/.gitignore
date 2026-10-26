@@ -1,0 +1,10 @@
+node_modules/
+work/
+backups/
+*.goosebackup
+*.goosebackup.json
+*.local.json
+*.sqlite*
+*.db
+*.log
+.env*
