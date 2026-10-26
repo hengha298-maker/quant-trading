@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {emptyState, saveAccount, saveEntry} from '../web/domain.js';
+import {emptyPlanning, saveSnapshot, addWatch, saveReport, saveSalaryPlan} from '../web/planning.js';
 import {canonical,parseJsonStrict,migrateState,encryptBackup,decryptBackup,parseP1Import,applyP1Import,previewRestore,restoreMerge,restoreReplace} from '../web/io.js';
 
 const password='fictional-test-passphrase-only';
@@ -9,7 +10,7 @@ function p1(){return {schema_version:1,as_of:'2026-01-10',transaction_history_co
 
 test('encrypted backup restores all unknowns and full audit exactly without exposing names',async()=>{
  const s=await applyP1Import(ledger(),await parseP1Import(JSON.stringify(p1())));const e=await encryptBackup(s,password);
- assert.equal(e.cipher,'AES-GCM-256');assert.equal(e.iterations,600000);assert.ok(!JSON.stringify(e).includes('虚构测试银行'));
+ assert.equal(e.cipher,'AES-GCM-256');assert.equal(e.version,2);assert.equal(e.iterations,600000);assert.ok(!JSON.stringify(e).includes('虚构测试银行'));
  assert.equal(canonical(await decryptBackup(e,password)),canonical(s));assert.equal(s.imports[0].accounts[0].cash,null);assert.equal(s.imports[0].positions[0].broker_cost,null);
 });
 test('fresh salt and nonce are used for every export',async()=>{const s=ledger(),a=await encryptBackup(s,password),b=await encryptBackup(s,password);assert.notEqual(a.salt,b.salt);assert.notEqual(a.iv,b.iv);assert.notEqual(a.ciphertext,b.ciphertext);});
@@ -53,4 +54,134 @@ test('merging the same P1 fingerprint from two devices keeps one reference and b
 test('large valid ledger exports a recoverable encrypted envelope beyond 8 MiB base64',async()=>{
  const s=emptyState();s.accounts=Array.from({length:700},(_,i)=>({id:'fictional-'+i,name:'虚构大备份测试',type:'bank',openingBalance:null,openingDate:'2026-01-01',note:'x'.repeat(9990),annualRate:null,archived:false}));
  const e=await encryptBackup(s,password);assert.ok(JSON.stringify(e).length>8*1024*1024);assert.equal((await decryptBackup(JSON.stringify(e),password)).accounts.length,700);
+});
+
+// This deliberately constructs the previous release's authenticated v1 format
+// directly, so compatibility is tested independently of the new exporter.
+async function legacyEncryptedBackup(payload) {
+ const salt=crypto.getRandomValues(new Uint8Array(16)),iv=crypto.getRandomValues(new Uint8Array(12));
+ const header={format:'goose-v3-encrypted',version:1,cipher:'AES-GCM-256',kdf:'PBKDF2-SHA256',iterations:600000,salt:Buffer.from(salt).toString('base64'),iv:Buffer.from(iv).toString('base64'),createdAt:'2026-01-02T00:00:00.000Z'};
+ const encoder=new TextEncoder();
+ const material=await crypto.subtle.importKey('raw',encoder.encode(password),'PBKDF2',false,['deriveKey']);
+ const key=await crypto.subtle.deriveKey({name:'PBKDF2',salt,iterations:header.iterations,hash:'SHA-256'},material,{name:'AES-GCM',length:256},false,['encrypt']);
+ const encrypted=await crypto.subtle.encrypt({name:'AES-GCM',iv,additionalData:encoder.encode(canonical(header))},key,encoder.encode(canonical(payload)));
+ return {...header,ciphertext:Buffer.from(encrypted).toString('base64')};
+}
+
+test('historical schema-one payload defaults planning only when absent without mutating the original',()=>{
+ const old=ledger();delete old.planning;const before=canonical(old),restored=migrateState(old);
+ assert.deepEqual(restored.planning,emptyPlanning());assert.equal(canonical(old),before);assert.equal(restored.entries[0].amount,'1234');
+ const schemaZero={...old,schemaVersion:0};delete schemaZero.imports;delete schemaZero.audit;
+ assert.deepEqual(migrateState(schemaZero).planning,emptyPlanning());
+});
+
+test('genuine encrypted v1 backups remain readable and are re-exported as authenticated v2',async()=>{
+ const old=ledger();delete old.planning;const previous=await legacyEncryptedBackup(old);
+ const restored=await decryptBackup(JSON.stringify(previous),password);
+ assert.equal(canonical(restored),canonical(migrateState(old)));assert.deepEqual(restored.planning,emptyPlanning());
+ const current=await encryptBackup(restored,password);assert.equal(current.version,2);
+ assert.equal(canonical(await decryptBackup(current,password)),canonical(restored));
+ await assert.rejects(decryptBackup({...current,version:1},password));
+});
+
+test('null, future and malformed planning are rejected rather than replaced with empty arrays',()=>{
+ for(const invalid of [null,undefined,[],{...emptyPlanning(),schemaVersion:99},{...emptyPlanning(),snapshots:null},{...emptyPlanning(),reports:{}},{...emptyPlanning(),watchlist:'invalid'},{...emptyPlanning(),salaryPlans:null}]) {
+  const current=ledger();current.planning=invalid;
+  if(invalid===undefined) {
+   // JSON has no undefined; an explicit in-memory undefined must not be a
+   // loophole for dropping an extension before validating it.
+   assert.throws(()=>migrateState(current));
+  } else assert.throws(()=>migrateState(current));
+ }
+});
+
+function plannedLedger() {
+ const date='2026-01-02';
+ let state=saveSnapshot(ledger(),{date,items:[{name:'完全虚构测试现金',type:'cash',balance:'10000'},{name:'完全虚构未知借款',type:'loan',balance:null}],note:'离线备份测试，不是真实财富数据'});
+ state=addWatch(state,{symbol:'600900.SH',name:'虚构测试关注'});
+ state=saveReport(state,{format:'goose-investment-report',version:1,id:'fictional-report-only',source:'完全虚构离线测试',asOf:date,generatedAt:'2026-01-02T12:00:00.000Z',strategy:'虚构测试策略',symbols:['600900.SH'],signals:[],backtest:null,paperTrades:[],notes:''});
+ return saveSalaryPlan(state,{date,input:{date,cashAsOf:null,receipt:'10000',cashBefore:null,emergency:'0',fixed:'0',future:'0',investment:'0',savings:'0',free:'0',repayment:'0',debtBalance:'0',debtRate:null,debtDue:null,risk:'balanced',cashBasis:'before-receipt'},status:'draft'});
+}
+
+test('all four planning collections and unknown balances survive v2 encryption and full restore exactly',async()=>{
+ const state=plannedLedger(),before=canonical(state),encrypted=await encryptBackup(state,password);
+ const restored=await decryptBackup(encrypted,password);
+ assert.equal(encrypted.version,2);assert.equal(canonical(restored),before);
+ assert.equal(restored.planning.snapshots[0].items[1].balance,null);
+ assert.equal(restored.planning.salaryPlans[0].input.cashBefore,null);
+ assert.equal(canonical(restoreReplace(emptyState(),restored)),before);
+ const preview=previewRestore(emptyState(),restored);
+ for(const key of ['snapshots','reports','watchlist','salaryPlans'])assert.equal(preview[key],1);
+ assert.equal(preview.accounts,1);assert.equal(preview.entries,1);assert.equal(preview.imports,0);assert.deepEqual(preview.conflicts,[]);
+ assert.equal(canonical(state),before);
+});
+
+test('planning merge preserves every extension, is idempotent and retains it when merging an older backup',()=>{
+ const existing=ledger(),incoming=plannedLedger(),original=canonical(incoming);
+ const merged=restoreMerge(existing,incoming);
+ assert.equal(canonical(merged.planning),canonical(incoming.planning));
+ assert.equal(canonical(restoreMerge(merged,incoming)),canonical(merged));
+ const old=ledger();delete old.planning;
+ assert.equal(canonical(restoreMerge(merged,old).planning),canonical(merged.planning));
+ assert.equal(canonical(incoming),original);
+});
+
+test('each planning collection detects same-id different-content conflicts without changing either side',()=>{
+ const current=plannedLedger(),before=canonical(current);
+ const changes={snapshots:x=>{x.note+=' changed';},reports:x=>{x.notes+=' changed';},watchlist:x=>{x.name+=' changed';},salaryPlans:x=>{x.input.risk='conservative';}};
+ for(const [key,change] of Object.entries(changes)) {
+  const incoming=structuredClone(current);change(incoming.planning[key][0]);const incomingBefore=canonical(incoming);
+  const preview=previewRestore(current,incoming);
+  assert.deepEqual(preview.conflicts,[{type:`planning.${key}`,id:incoming.planning[key][0].id}]);
+  assert.throws(()=>restoreMerge(current,incoming),/冲突/);
+  assert.equal(canonical(current),before);assert.equal(canonical(incoming),incomingBefore);
+ }
+});
+
+test('duplicate planning ids, invalid item amounts and malformed records cannot enter encrypted backups or merges',async()=>{
+ const mutations=[
+  state=>state.planning.snapshots.push(structuredClone(state.planning.snapshots[0])),
+  state=>{state.planning.snapshots[0].items[0].balance=10000;},
+  state=>{state.planning.reports[0].version=99;},
+  state=>{state.planning.watchlist[0].symbol='unverified';},
+  state=>{state.planning.salaryPlans[0].input.cashBefore=0;},
+ ];
+ for(const mutate of mutations) {
+  const state=plannedLedger();mutate(state);const before=canonical(state);
+  assert.throws(()=>migrateState(state));assert.throws(()=>restoreMerge(ledger(),state));await assert.rejects(encryptBackup(state,password));
+  assert.equal(canonical(state),before);
+ }
+});
+
+test('same watchlist symbol with different ids is an explicit semantic restore conflict',()=>{
+ const current=plannedLedger(),incoming=structuredClone(current);
+ incoming.planning.watchlist[0].id='fictional-second-watch-id';
+ const before=canonical(current),incomingBefore=canonical(incoming);
+ assert.deepEqual(previewRestore(current,incoming).conflicts,[{type:'planning.watchlist-symbol',id:'fictional-second-watch-id'}]);
+ assert.throws(()=>restoreMerge(current,incoming),/冲突/);
+ assert.equal(canonical(current),before);assert.equal(canonical(incoming),incomingBefore);
+ assert.equal(canonical(restoreMerge(current,current)),before);
+});
+
+test('same report source date and strategy with different ids cannot be silently merged or discarded',()=>{
+ const current=plannedLedger(),incoming=structuredClone(current);
+ incoming.planning.reports[0].id='fictional-second-report-id';
+ const before=canonical(current),incomingBefore=canonical(incoming);
+ assert.deepEqual(previewRestore(current,incoming).conflicts,[{type:'planning.report-source',id:'fictional-second-report-id'}]);
+ assert.throws(()=>restoreMerge(current,incoming),/冲突/);
+ assert.equal(canonical(current),before);assert.equal(canonical(incoming),incomingBefore);
+ incoming.planning.reports[0].notes='不同报告内容仍属于同来源、日期和策略';
+ assert.deepEqual(previewRestore(current,incoming).conflicts,[{type:'planning.report-source',id:'fictional-second-report-id'}]);
+ assert.throws(()=>restoreMerge(current,incoming),/冲突/);
+ assert.equal(canonical(restoreMerge(current,current)),before);
+});
+
+test('different report source keys remain independent records rather than false semantic conflicts',()=>{
+ const current=plannedLedger(),incoming=structuredClone(current);
+ incoming.planning.reports[0].id='fictional-other-strategy-id';
+ incoming.planning.reports[0].strategy='另一虚构测试策略';
+ assert.deepEqual(previewRestore(current,incoming).conflicts,[]);
+ const merged=restoreMerge(current,incoming);
+ assert.equal(merged.planning.reports.length,2);
+ assert.equal(canonical(restoreMerge(merged,incoming)),canonical(merged));
 });

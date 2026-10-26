@@ -1,5 +1,6 @@
 import { emptyState, parseMoney, formatMoney, saveAccount, archiveAccount, saveEntry, voidEntry, balances, overview } from './domain.js';
 import { loadState, persistState, encryptBackup, decryptBackup, previewRestore, restoreMerge, restoreReplace, parseP1Import, applyP1Import, storageStatus, requestPersistence } from './io.js';
+import { mountInvestment } from './investment-ui.js';
 
 const $ = (id) => document.getElementById(id);
 const typeNames = { bank: '银行账户', cash: '现金 / 支付账户', securities: '股票证券账户', fund: '基金账户', other: '其他资产', loan: '借款负债', credit: '信用卡负债' };
@@ -20,6 +21,7 @@ let toastTimer;
 let staleData = false;
 const warningMessages = new Map();
 const writeChannel = 'BroadcastChannel' in window ? new BroadcastChannel('goose-v3-write-events') : null;
+const investmentUI = mountInvestment({ getState: () => state, commit, info, today });
 
 function node(tag, className, content) {
   const result = document.createElement(tag);
@@ -58,7 +60,7 @@ function warn(message, key = 'data') {
   }
 }
 function accountName(id) { return state.accounts.find((account) => account.id === id)?.name || '未知账户'; }
-function hasRecords() { return state.accounts.length > 0 || state.entries.length > 0 || (state.imports || []).length > 0; }
+function hasRecords() { return state.accounts.length > 0 || state.entries.length > 0 || (state.imports || []).length > 0 || ['snapshots', 'reports', 'salaryPlans', 'watchlist'].some(key => (state.planning?.[key] || []).length > 0); }
 
 async function commit(next, success, { recovery = false } = {}) {
   if (busy) throw new Error('正在保存，请稍候再试。');
@@ -215,6 +217,7 @@ function renderEntries() {
 
 function render() {
   renderOverview(); renderAssets(); renderEntries();
+  investmentUI.render();
   $('schema-version').textContent = state.schemaVersion ?? state.version ?? '1';
 }
 
@@ -352,7 +355,7 @@ async function fileText(input, label, limitMiB = 12) {
 function countValue(value) { return Array.isArray(value) ? value.length : Number(value || 0); }
 function showRestorePreview() {
   const preview = previewRestore(state, pendingRestore);
-  fill($('restore-summary'), [node('h3', '', '备份已通过验证'), node('p', 'helper', `待导入：${countValue(preview.accounts)} 个账户，${countValue(preview.entries)} 笔流水，${countValue(preview.imports)} 份历史快照。`)]);
+  fill($('restore-summary'), [node('h3', '', '备份已通过验证'), node('p', 'helper', `待导入：${countValue(preview.accounts)} 个账户，${countValue(preview.entries)} 笔流水，${countValue(preview.imports)} 份历史持仓。`), node('p', 'helper', `投资规划：${pendingRestore.planning?.snapshots?.length || 0} 份资产快照，${pendingRestore.planning?.salaryPlans?.length || 0} 份工资计划，${pendingRestore.planning?.reports?.length || 0} 份研究报告，${pendingRestore.planning?.watchlist?.length || 0} 个关注标的。`)]);
   const conflicts = countValue(preview.conflicts);
   $('restore-conflicts').textContent = conflicts ? `发现 ${conflicts} 项相同 ID 内容冲突，禁止合并。完整替换需要先导出当前数据并明确确认。` : '未发现同 ID 内容冲突。合并会保留当前记录并去重。';
   $('merge-restore').disabled = conflicts > 0 || !!bootError;
@@ -383,7 +386,7 @@ function bindEvents() {
   document.querySelectorAll('[data-close]').forEach((button) => button.addEventListener('click', () => $(button.dataset.close).close()));
   document.querySelectorAll('dialog').forEach((dialog) => dialog.addEventListener('click', (event) => { if (event.target === dialog) { const bounds = dialog.getBoundingClientRect(); if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) dialog.close(); } }));
   $('quick-add').addEventListener('click', () => openEntry());
-  $('refresh-overview').addEventListener('click', () => { renderOverview(); info('已依据本机记录刷新；未请求实时行情。'); });
+  $('refresh-overview').addEventListener('click', () => { renderOverview(); investmentUI.render(); info('已依据本机记录刷新；未请求实时行情。'); });
   $('overview-month').addEventListener('change', renderOverview);
   $('show-archived').addEventListener('change', renderAssets);
   for (const id of ['entry-search', 'entry-filter-kind', 'entry-filter-from', 'entry-filter-to', 'show-voided']) $(id).addEventListener(id === 'entry-search' ? 'input' : 'change', renderEntries);

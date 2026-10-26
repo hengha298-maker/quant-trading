@@ -138,7 +138,7 @@ class Launcher:
         self.busy = False
         self.phone_url = tk.StringVar(value="尚未开启手机安装服务")
         self.status = tk.StringVar(value="正在启动仅本机可访问的 V3 页面……")
-        root.title("养鹅计划 V3 · 独立开发版")
+        root.title("养鹅计划 V3.1 · 投资决策开发版")
         root.geometry("670x520")
         root.minsize(600, 480)
         frame = ttk.Frame(root, padding=22)

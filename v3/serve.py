@@ -21,6 +21,8 @@ RESOURCES = {
     "styles.css": "text/css; charset=utf-8",
     "domain.js": "text/javascript; charset=utf-8",
     "io.js": "text/javascript; charset=utf-8",
+    "planning.js": "text/javascript; charset=utf-8",
+    "investment-ui.js": "text/javascript; charset=utf-8",
     "sw.js": "text/javascript; charset=utf-8",
     "manifest.webmanifest": "application/manifest+json; charset=utf-8",
     "icons/icon.svg": "image/svg+xml",

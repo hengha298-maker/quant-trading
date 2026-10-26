@@ -1,3 +1,4 @@
+import {emptyPlanning, validatePlanning} from './planning.js';
 // All money stays in integer cents. No market value is inferred from imported positions.
 const ASSETS = new Set(['bank', 'cash', 'securities', 'fund', 'other']);
 const DEBTS = new Set(['loan', 'credit']);
@@ -55,7 +56,7 @@ function jsonSafe(value, depth = 0) {
 }
 
 export function emptyState() {
-  return { schemaVersion: 1, accounts: [], entries: [], imports: [], audit: [] };
+  return { schemaVersion: 1, accounts: [], entries: [], imports: [], audit: [], planning: emptyPlanning() };
 }
 
 export function parseMoney(value) {
@@ -139,6 +140,7 @@ export function validateState(state) {
   object(state, '账本');
   jsonSafe(state);
   if (state.schemaVersion !== 1) fail('不支持的数据结构版本');
+  if (own(state, 'planning')) validatePlanning(state.planning);
   for (const key of ['accounts', 'entries', 'imports', 'audit']) if (!Array.isArray(state[key])) fail(`${key}必须是数组`);
   if (state.accounts.length > 10000 || state.entries.length > 200000 || state.imports.length > 10000 || state.audit.length > 400000) fail('账本记录数量超出本机保护上限');
   const accounts = new Map();

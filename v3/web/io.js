@@ -1,4 +1,5 @@
 import {emptyState, validateState} from './domain.js';
+import {emptyPlanning, validatePlanning} from './planning.js';
 
 const enc = new TextEncoder();
 const dec = new TextDecoder('utf-8', {fatal: true});
@@ -8,6 +9,7 @@ let connection, revision = 0, revisionToken = 0, warning = '';
 const fail = (message) => { throw new Error(message); };
 const copy = (value) => JSON.parse(JSON.stringify(value));
 const object = (x) => x !== null && typeof x === 'object' && !Array.isArray(x);
+const PLANNING_COLLECTIONS = ['snapshots', 'reports', 'watchlist', 'salaryPlans'];
 
 export function canonical(value) {
   if (Array.isArray(value)) return '[' + value.map(canonical).join(',') + ']';
@@ -67,12 +69,16 @@ export function parseJsonStrict(text, maxBytes = MAX_BYTES) {
 }
 
 export function migrateState(input) {
+  const hadPlanning = object(input) && Object.hasOwn(input, 'planning');
   const state = parseJsonStrict(JSON.stringify(input));
   if (!object(state) || !Number.isInteger(state.schemaVersion)) fail('缺少数据结构版本');
+  if (hadPlanning && !Object.hasOwn(state, 'planning')) fail('规划数据无效，不能静默丢弃扩展');
   if (state.schemaVersion === 0) {
     state.imports ??= []; state.audit ??= []; state.schemaVersion = 1;
   }
   if (state.schemaVersion !== 1) fail('不支持此数据版本；请保留原备份并使用相应新版');
+  if (!Object.hasOwn(state, 'planning')) state.planning = emptyPlanning();
+  validatePlanning(state.planning);
   validateState(state); validateImports(state.imports);
   return state;
 }
@@ -85,7 +91,7 @@ function database() {
   if (connection) return connection;
   connection = new Promise((resolve, reject) => {
     if (!globalThis.indexedDB) { reject(new Error('此浏览器无法打开本地数据库')); return; }
-    const req = indexedDB.open('goose-v3-private', 1);
+    const req = indexedDB.open('goose-v3-private', 2);
     req.onupgradeneeded = () => {
       if (!req.result.objectStoreNames.contains('snapshots')) req.result.createObjectStore('snapshots', {keyPath: 'id'});
     };
@@ -173,7 +179,7 @@ async function derive(password, salt, iterations) {
 
 export async function encryptBackup(input, password) {
   const state = migrateState(input);
-  const header = {format: 'goose-v3-encrypted', version: 1, cipher: 'AES-GCM-256', kdf: 'PBKDF2-SHA256', iterations: KDF_ITERATIONS,
+  const header = {format: 'goose-v3-encrypted', version: 2, cipher: 'AES-GCM-256', kdf: 'PBKDF2-SHA256', iterations: KDF_ITERATIONS,
     salt: b64(crypto.getRandomValues(new Uint8Array(16))), iv: b64(crypto.getRandomValues(new Uint8Array(12))), createdAt: new Date().toISOString()};
   const key = await derive(password, unb64(header.salt, 16), header.iterations);
   const ciphertext = await crypto.subtle.encrypt({name: 'AES-GCM', iv: unb64(header.iv, 12), additionalData: enc.encode(canonical(header))}, key, enc.encode(canonical(state)));
@@ -183,7 +189,7 @@ export async function encryptBackup(input, password) {
 export async function decryptBackup(input, password) {
   const doc = typeof input === 'string' ? parseJsonStrict(input, MAX_BYTES * 1.5) : parseJsonStrict(JSON.stringify(input), MAX_BYTES * 1.5);
   const keys = ['format','version','cipher','kdf','iterations','salt','iv','createdAt','ciphertext'];
-  if (!object(doc) || Object.keys(doc).length !== keys.length || keys.some(k => !Object.hasOwn(doc, k)) || doc.format !== 'goose-v3-encrypted' || doc.version !== 1 || doc.cipher !== 'AES-GCM-256' || doc.kdf !== 'PBKDF2-SHA256' || !Number.isInteger(doc.iterations) || doc.iterations < 100000 || doc.iterations > 2000000 || typeof doc.createdAt !== 'string' || !Number.isFinite(Date.parse(doc.createdAt))) fail('不支持或无效的加密备份');
+  if (!object(doc) || Object.keys(doc).length !== keys.length || keys.some(k => !Object.hasOwn(doc, k)) || doc.format !== 'goose-v3-encrypted' || ![1, 2].includes(doc.version) || doc.cipher !== 'AES-GCM-256' || doc.kdf !== 'PBKDF2-SHA256' || !Number.isInteger(doc.iterations) || doc.iterations < 100000 || doc.iterations > 2000000 || typeof doc.createdAt !== 'string' || !Number.isFinite(Date.parse(doc.createdAt))) fail('不支持或无效的加密备份');
   const salt = unb64(doc.salt, 16), iv = unb64(doc.iv, 12), bytes = unb64(doc.ciphertext, MAX_BYTES + 16);
   if (salt.length !== 16 || iv.length !== 12 || bytes.length < 16) fail('加密备份不完整');
   const {ciphertext, ...header} = doc;
@@ -248,12 +254,28 @@ export function previewRestore(currentInput, incomingInput) {
     const map = new Map(current[key].map(x => [x.id, x]));
     for (const item of incoming[key]) if (map.has(item.id) && canonical(map.get(item.id)) !== canonical(item)) conflicts.push({type: key, id: item.id});
   }
+  for (const key of PLANNING_COLLECTIONS) {
+    const map = new Map(current.planning[key].map(x => [x.id, x]));
+    for (const item of incoming.planning[key]) if (map.has(item.id) && canonical(map.get(item.id)) !== canonical(item)) conflicts.push({type: `planning.${key}`, id: item.id});
+  }
+  const watchedSymbols = new Map(current.planning.watchlist.map(item => [item.symbol, item.id]));
+  for (const item of incoming.planning.watchlist) {
+    const existingId = watchedSymbols.get(item.symbol);
+    if (existingId !== undefined && existingId !== item.id) conflicts.push({type: 'planning.watchlist-symbol', id: item.id});
+  }
+  const reportSource = item => canonical([item.source, item.asOf, item.strategy]);
+  const reportSources = new Map(current.planning.reports.map(item => [reportSource(item), item.id]));
+  for (const item of incoming.planning.reports) {
+    const existingId = reportSources.get(reportSource(item));
+    if (existingId !== undefined && existingId !== item.id) conflicts.push({type: 'planning.report-source', id: item.id});
+  }
   for (const item of incoming.imports) {
     const same = current.imports.find(x=>x.fingerprint===item.fingerprint);
     const content = x=>canonical({asOf:x.asOf,accounts:x.accounts,positions:x.positions,valuationIncluded:x.valuationIncluded});
     if (same && content(same)!==content(item)) conflicts.push({type:'import-fingerprint',id:item.id});
   }
-  return {accounts: incoming.accounts.length, entries: incoming.entries.length, imports: incoming.imports.length, conflicts};
+  return {accounts: incoming.accounts.length, entries: incoming.entries.length, imports: incoming.imports.length,
+    ...Object.fromEntries(PLANNING_COLLECTIONS.map(key => [key, incoming.planning[key].length])), conflicts};
 }
 export function restoreMerge(currentInput, incomingInput) {
   const current = migrateState(currentInput), incoming = migrateState(incomingInput);
@@ -264,6 +286,10 @@ export function restoreMerge(currentInput, incomingInput) {
     const ids = new Set(current[key].map(x => x.id));
     const fingerprints = key === 'imports' ? new Set(current.imports.map(x => x.fingerprint)) : null;
     current[key].push(...incoming[key].filter(x => !ids.has(x.id) && (!fingerprints || !fingerprints.has(x.fingerprint))));
+  }
+  for (const key of PLANNING_COLLECTIONS) {
+    const ids = new Set(current.planning[key].map(x => x.id));
+    current.planning[key].push(...incoming.planning[key].filter(x => !ids.has(x.id)));
   }
   return migrateState(current);
 }
