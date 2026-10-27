@@ -1,0 +1,117 @@
+{
+  "format": "goose-intraday-replay",
+  "version": 1,
+  "fictional": true,
+  "description": "完全虚构价格和传输元数据，仅为离线工程回放，不是真实600900行情。",
+  "observations": [
+    {
+      "source": "eastmoney-minute",
+      "endpoint": "https://push2his.eastmoney.com/api/qt/stock/trends2/get",
+      "requestedAt": "2026-10-27T14:40:08+08:00",
+      "receivedAt": "2026-10-27T14:40:09+08:00",
+      "elapsedMs": 20,
+      "httpStatus": 200,
+      "headers": {},
+      "quote": {
+        "symbol": "600900.SH",
+        "source": "eastmoney-minute",
+        "sourceUrl": "https://push2his.eastmoney.com/api/qt/stock/trends2/get",
+        "name": "长江电力",
+        "price": "20.00",
+        "previousClose": "20.00",
+        "currency": "CNY",
+        "priceUnit": "CNY-per-share",
+        "adjustment": "none",
+        "sourceTimestamp": "2026-10-27T14:40:00+08:00",
+        "timestampKind": "minute-label-not-certified-last-trade",
+        "confirmedLastTradeAt": null,
+        "volume": 1000,
+        "volumeUnit": "shares",
+        "unitBasis": "reviewed-adapter-field-semantics-not-independent-exchange-certification",
+        "independentFeedVerified": false,
+        "warnings": [
+          "LAST_TRADE_TIME_NOT_PROVIDED",
+          "PUBLIC_WEB_ENDPOINT_NO_SCHEMA_OR_LATENCY_GUARANTEE"
+        ],
+        "rowCount": 1,
+        "firstSourceTimestamp": "2026-10-27 14:40",
+        "sourceFields": [
+          "时间",
+          "开盘",
+          "收盘",
+          "最高",
+          "最低",
+          "成交量(手)",
+          "成交额(元)",
+          "均价"
+        ],
+        "sourceDates": [
+          "2026-10-27"
+        ],
+        "historicalMissingOpenRows": 0,
+        "barFinality": "not-certified"
+      },
+      "rawSha256": "9d4f93966f1a8a0eb581f6dc9b994b83e38285f0fb7b1ff21ff5192c31725ff7",
+      "rawBytes": 181,
+      "errors": [],
+      "transport": {
+        "tlsVerification": true,
+        "proxyConfigurationModified": false,
+        "attempts": 1
+      }
+    },
+    {
+      "source": "tencent-quote",
+      "endpoint": "https://qt.gtimg.cn/q=sh600900",
+      "requestedAt": "2026-10-27T14:40:08+08:00",
+      "receivedAt": "2026-10-27T14:40:09+08:00",
+      "elapsedMs": 20,
+      "httpStatus": 200,
+      "headers": {},
+      "quote": {
+        "symbol": "600900.SH",
+        "source": "tencent-quote",
+        "sourceUrl": "https://qt.gtimg.cn/q=sh600900",
+        "name": "长江电力",
+        "price": "20.00",
+        "previousClose": "20.00",
+        "currency": "CNY",
+        "priceUnit": "CNY-per-share",
+        "adjustment": "none",
+        "sourceTimestamp": "2026-10-27T14:40:00+08:00",
+        "timestampKind": "provider-quote-update-not-certified-last-trade",
+        "confirmedLastTradeAt": null,
+        "volume": 100000,
+        "volumeUnit": "shares",
+        "unitBasis": "reviewed-adapter-field-semantics-not-independent-exchange-certification",
+        "independentFeedVerified": false,
+        "warnings": [
+          "LAST_TRADE_TIME_NOT_PROVIDED",
+          "PUBLIC_WEB_ENDPOINT_NO_SCHEMA_OR_LATENCY_GUARANTEE",
+          "TENCENT_UNVERSIONED_WEB_SCHEMA_REQUIRES_MANUAL_REVIEW"
+        ],
+        "sourceFieldCount": 88,
+        "sourceFields": [
+          "1:name",
+          "2:code",
+          "3:price(CNY)",
+          "4:previousClose",
+          "5:open",
+          "6:volume(lots)",
+          "30:providerUpdate",
+          "33:high",
+          "34:low",
+          "36:volume(lots)"
+        ]
+      },
+      "rawSha256": "4cdd3e45a8e5ec731f48f030dca2024749ca13ece1182b6f0eab767cc03ce43b",
+      "rawBytes": 164,
+      "errors": [],
+      "transport": {
+        "tlsVerification": true,
+        "proxyConfigurationModified": false,
+        "attempts": 1
+      }
+    }
+  ]
+}
