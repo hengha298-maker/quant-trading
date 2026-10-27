@@ -1,0 +1,23 @@
+name: V3.3 intraday health
+on:
+  push:
+    paths: ['v33/**', 'v32/**', 'Check-V3.3-Health.cmd', '.github/workflows/v33.yml']
+  pull_request:
+    paths: ['v33/**', 'v32/**', 'Check-V3.3-Health.cmd', '.github/workflows/v33.yml']
+jobs:
+  offline-validation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r v32/requirements-lock.txt
+      - run: python -B -m unittest discover -s v33/tests -v
+      - run: python -B -m unittest discover -s v32/tests -v
+      - run: python -B -m unittest discover -s v3/tests -p test_server.py -v
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: node --test v3/tests/*.test.mjs
+      - run: node --test v33/tests/*.test.mjs
