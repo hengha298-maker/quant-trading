@@ -41,6 +41,8 @@ TLS和主机名验证始终开启，沿用操作系统代理/绕过配置，不�
 
 XSHG 日历继续显式止于 **2026-12-31**。2027或日历不可用时拒绝盘中认证且不发起新行情请求；不猜周一到周五。
 
+上游与离线JSON还具有平台无关的64层结构嵌套限制（字符串内括号不计层），拒绝重复/不安全键及非有限数字，不依赖Python解释器的隐式递归上限。
+
 ## 研究报告与旧版兼容
 
 本阶段一律观察、不操作，`decisionAllowed:false`、`manualAcceptanceVerified:false`、`intradayReliabilityVerified:false`。`fresh-observation` 只说明本次字段/时间/双接口阈值通过，不能称为已完成实际盘中验收。

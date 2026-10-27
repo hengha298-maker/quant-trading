@@ -10,6 +10,7 @@ from uuid import uuid4
 from .health import build_health
 from .network import SOURCES, fetch_observation
 from .reports import phone_report, markdown, canonical
+from .json_limits import check_nesting
 
 ROOT = Path(__file__).resolve().parents[1]
 WORK = ROOT / 'work'
@@ -40,7 +41,9 @@ def load_json(path):
             doc[k] = v
         return doc
     try:
-        return json.loads(path.read_text(encoding='utf-8-sig'), object_pairs_hook=pairs,
+        text = path.read_text(encoding='utf-8-sig')
+        check_nesting(text)
+        return json.loads(text, object_pairs_hook=pairs,
             parse_float=lambda _: (_ for _ in ()).throw(ValueError('INPUT_FLOAT_NOT_SUPPORTED_USE_DECIMAL_TEXT')),
             parse_constant=lambda _: (_ for _ in ()).throw(ValueError('INPUT_NONFINITE_NUMBER')))
     except (json.JSONDecodeError, UnicodeError, RecursionError):

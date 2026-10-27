@@ -96,6 +96,18 @@ class ParserTests(unittest.TestCase):
         for raw in [b'{"rc":0,"rc":1}', b'{"n":NaN}', b'{"__proto__":{}}', b'['*5000+b']'*5000]:
             with self.assertRaises(ValueError):network.strict_json(raw)
 
+    def test_explicit_depth_bound_is_platform_independent_and_ignores_escaped_strings(self):
+        text=json.dumps({'text':'"\\'+'['*5000+'}'*5000})
+        self.assertEqual(network.strict_json(text.encode())['text'],json.loads(text)['text'])
+        self.assertIsInstance(network.strict_json(('['*64+']'*64).encode()),list)
+        with self.assertRaisesRegex(ValueError,'NESTING_LIMIT'):network.strict_json(('['*65+']'*65).encode())
+        cli.WORK.mkdir(exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=cli.WORK) as directory:
+            p=Path(directory)/'fictional.json';p.write_text(text,encoding='utf-8')
+            self.assertEqual(cli.load_json(p)['text'],json.loads(text)['text'])
+            p.write_text('['*65+']'*65,encoding='utf-8')
+            with self.assertRaisesRegex(ValueError,'NESTING_LIMIT'):cli.load_json(p)
+
     def test_missing_duplicate_reversed_and_invalid_minute_rows_are_refused(self):
         for rows in [[], ['bad'], ['2026-02-30 14:40,20,20,20,20,1,20,20'],
             [json.loads(eastmoney())['data']['trends'][0]]*2,

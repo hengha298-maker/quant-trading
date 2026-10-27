@@ -17,6 +17,7 @@ from urllib.parse import urlencode, urlsplit
 from urllib.request import HTTPRedirectHandler, HTTPSHandler, Request, build_opener, getproxies, proxy_bypass
 
 from goose_research.market import BJ
+from .json_limits import check_nesting
 
 SYMBOL = '600900.SH'
 MAX_BYTES = 2 * 1024 * 1024
@@ -53,6 +54,8 @@ def lots(value):
 
 
 def strict_json(raw):
+    if len(raw) > MAX_BYTES:
+        fail('UPSTREAM_BODY_TOO_LARGE')
     def unique(items):
         result = {}
         for key, value in items:
@@ -61,7 +64,9 @@ def strict_json(raw):
             result[key] = value
         return result
     try:
-        return json.loads(raw.decode('utf-8-sig'), parse_float=Decimal,
+        text = raw.decode('utf-8-sig')
+        check_nesting(text)
+        return json.loads(text, parse_float=Decimal,
             parse_constant=lambda _: fail('UPSTREAM_NONFINITE_NUMBER'), object_pairs_hook=unique)
     except (UnicodeError, json.JSONDecodeError, RecursionError):
         fail('UPSTREAM_JSON_INVALID')
