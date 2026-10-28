@@ -160,7 +160,7 @@ def make_server(root, port=9395, host='127.0.0.1', analyze=None, *, allowed_host
                 return False
             if urlsplit(self.path).path.startswith(PREFIX):
                 authorization = self.headers.get('Authorization', '')
-                if not _credential_matches(authorization, 'Bearer ' + access_key):
+                if not _credential_matches(authorization, 'Bearer ' + self.server.access_key):
                     self._json(401, {'error': 'PRIVATE_ACCESS_REQUIRED'})
                     return False
             return True
@@ -180,7 +180,7 @@ def make_server(root, port=9395, host='127.0.0.1', analyze=None, *, allowed_host
                 self._json(200, {'csrf': csrf})
             elif route == PREFIX + 'status':
                 with state_lock:
-                    self._json(200, dict(state))
+                    self._json(200, {**state, 'phoneSharing': getattr(self.server,'phone_route_status',None)})
             elif route == PREFIX + 'latest':
                 from .engine import mark_report_freshness
                 reports = _reports(repo)
@@ -197,6 +197,9 @@ def make_server(root, port=9395, host='127.0.0.1', analyze=None, *, allowed_host
                     from .engine import mark_report_freshness
                     report = mark_report_freshness(report)
                 self._json(200 if report else 404, {'report': report} if report else {'error': 'REPORT_MISSING'})
+            elif route == PREFIX + 'automation':
+                from .daily import latest_daily, schedule_plan
+                self._json(200, {'schedule': schedule_plan(), 'latest': latest_daily(repo), 'enabled': False})
             elif route == PREFIX + 'holdings':
                 try:
                     from .holdings import load_latest, load_latest_by_broker
@@ -222,7 +225,7 @@ def make_server(root, port=9395, host='127.0.0.1', analyze=None, *, allowed_host
                 # and backup format. The new dashboard has no service worker.
                 if route in {'/investment', '/investment/'}:
                     path, base = WEB / 'index.html', WEB
-                elif route in {'/investment/app.js', '/investment/styles.css'}:
+                elif route in {'/investment/app.js', '/investment/styles.css', '/investment/presentation.js'}:
                     path, base = WEB / route.rsplit('/', 1)[-1], WEB
                 else:
                     relative = 'index.html' if route == '/' else route.lstrip('/')

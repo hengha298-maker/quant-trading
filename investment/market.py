@@ -160,7 +160,7 @@ def parse_eastmoney(raw, symbol):
             (["ZERO_MINUTE_OPEN_IS_MISSING_NOT_ZERO_PRICE"] if missing_opens else [])}
 
 
-def _attempt(source, symbol, url, parser):
+def _attempt(source, symbol, url, parser, *, deadline=None):
     proxies = getproxies()
     started = datetime.now(timezone.utc)
     result = {"source": source, "symbol": symbol, "endpoint": url.split("?")[0],
@@ -171,8 +171,11 @@ def _attempt(source, symbol, url, parser):
             "proxyConfigurationModified": False, "attempts": 1}, "value": None}
     raw = None
     try:
+        remaining = (deadline - datetime.now(timezone.utc)).total_seconds() if deadline is not None else TIMEOUT
+        if remaining <= 0:
+            _fail("REPORT_DEADLINE_EXCEEDED_NO_REQUEST")
         with default_opener().open(Request(url, headers={"User-Agent": "GooseResearch/Investment (personal research)",
-                "Accept": "*/*"}), timeout=TIMEOUT) as response:
+                "Accept": "*/*"}), timeout=min(TIMEOUT, remaining)) as response:
             result["httpStatus"] = response.status
             if response.status != 200 or response.geturl() != url:
                 _fail("HTTP_OR_REDIRECT_INVALID")
@@ -182,6 +185,8 @@ def _attempt(source, symbol, url, parser):
                 _fail("UPSTREAM_BODY_TOO_LARGE")
             result.update(rawBytes=len(raw), rawSha256=sha256(raw).hexdigest(),
                 headers={key: (response.headers.get(key) or "")[:150] for key in ("Date", "Age", "Content-Type")})
+            if deadline is not None and datetime.now(timezone.utc) >= deadline:
+                _fail("REPORT_DEADLINE_EXCEEDED_RESPONSE_REJECTED")
             result["value"] = parser(raw)
     except ValueError as exc:
         code = str(exc)
@@ -309,7 +314,7 @@ def _dataset(symbol, bars, start, end, observation, quote):
     return validate_dataset(doc)
 
 
-def collect_market(symbols, output_dir, *, now=None, history_days=320):
+def collect_market(symbols, output_dir, *, now=None, history_days=320, deadline=None):
     """Collect live public responses; output_dir MUST be a local ignored work dir.
 
     Known instruments are reviewed explicitly. Unknown user instruments return
@@ -318,6 +323,8 @@ def collect_market(symbols, output_dir, *, now=None, history_days=320):
     now = now or datetime.now(timezone.utc)
     if now.tzinfo is None or not 30 <= history_days <= 600:
         _fail("AWARE_CLOCK_AND_BOUNDED_HISTORY_REQUIRED")
+    if deadline is not None and (not isinstance(deadline, datetime) or deadline.tzinfo is None):
+        _fail("AWARE_DEADLINE_REQUIRED")
     day = now.astimezone(BJ).date().isoformat()
     # Calendar range failure stops BEFORE any network or output mutation.
     xshg_sessions(day, day)
@@ -354,7 +361,7 @@ def collect_market(symbols, output_dir, *, now=None, history_days=320):
             "fields1": "f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f11,f12,f13", "fields2": "f51,f52,f53,f54,f55,f56,f57,f58",
             "ndays": "1", "iscr": "0", "secid": "1." + symbol[:6]}), lambda raw, s=symbol: parse_eastmoney(raw, s)))
     def save_attempt(args):
-        observation, raw = _attempt(*args)
+        observation, raw = _attempt(*args, deadline=deadline)
         if raw is not None:
             name = args[1] + "-" + args[0] + ".raw"
             (target / name).write_bytes(raw)

@@ -185,5 +185,15 @@ class PrivateServerTests(unittest.TestCase):
         self.assertEqual(len(self.request('GET', '/investment/api/holdings')[2]['accounts']), 2)
 
 
+    def test_new_presentation_asset_and_key_rotation_are_isolated(self):
+        status, headers, body = self.request('GET', '/investment/presentation.js')
+        self.assertEqual(status, 200)
+        self.assertIn('javascript', headers['Content-Type'])
+        self.server.access_key = 'test-rotated-private-key-' + 'r' * 48
+        self.assertEqual(self.request('GET', '/investment/api/latest')[0], 401)
+        self.token = self.server.access_key
+        self.assertEqual(self.request('GET', '/investment/api/latest')[0], 200)
+
+
 if __name__ == '__main__':
     unittest.main()
