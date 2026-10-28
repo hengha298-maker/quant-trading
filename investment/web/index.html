@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="color-scheme" content="light"><title>养鹅 · 投资决策</title><link rel="stylesheet" href="/investment/styles.css"></head>
+<body><main>
+<header><div><span class="eyebrow">GOOSE / 私人投资研究</span><h1>让决策有依据。</h1></div><span class="goose" aria-hidden="true">🪿</span></header>
+<p class="intro">真实持仓、核验行情、解释信号。下单始终由你决定。</p>
+<div id="connection" class="notice" role="status">正在连接电脑研究服务…</div>
+<nav aria-label="主导航"><button class="tab active" data-page="overview">今日分析</button><button class="tab" data-page="holdings">更新持仓</button><button class="tab" data-page="history">历史报告</button></nav>
+<section id="overview" class="page">
+<div class="heading"><h2>最新投资报告</h2><button id="refresh" class="primary">更新行情与分析</button></div>
+<p id="job" role="status" class="muted"></p><div id="report"></div>
+<div class="actions"><button class="download" data-report="report-v31">下载到原养鹅研究导入</button><button class="download" data-report="report-json">保存完整报告</button></div>
+<p class="footnote">本页面直接读取电脑上新生成的报告，不自动发送 Bark，不执行证券交易。报告下载包含私人数据，请妥善保存。离线时请使用原养鹅研究中已导入的报告；本页面不在浏览器中自动缓存真实财富数据。</p>
+</section>
+<section id="holdings" class="page" hidden>
+<h2>更新真实持仓</h2><p>华宝证券与银河证券分别保存，每个券商的新快照不会覆盖另一个券商。先选择日期和券商，再导入文件或手动核对录入。历史记录不会自动填入。</p>
+<div class="shared-fields"><label>持仓实际日期<input id="asof" type="date" required></label><label>本次更新的券商<select id="broker" required><option value="">请选择券商</option><option value="华宝证券">华宝证券</option><option value="银河证券">银河证券</option></select></label></div>
+<form id="import-form"><h3>有导出文件</h3><label>持仓导出文件<input id="file" type="file" accept=".csv,.xlsx" required></label><p class="footnote">支持 CSV / Excel（.xlsx）。只读取持仓必要字段，不要选择包含交易密码或验证码的文件。</p><button class="primary" type="submit">读取文件并预览</button></form>
+<details class="manual-entry" open><summary>没有导出文件：对照证券 App 手动录入</summary><form id="manual-form"><p class="footnote">可对照证券 App 或截图逐项填写。代码与数量必填；成本、现金未知时留空。录入只生成待核对预览。</p><div id="manual-rows"></div><button id="add-row" type="button">＋ 添加一只持仓</button><label>该券商可用资金（元，可留空）<input id="manual-cash" inputmode="decimal" placeholder="未知则留空" autocomplete="off"></label><button class="primary" type="submit">预览手动录入</button></form></details>
+<div id="import-status" role="status"></div><div id="preview"></div><button id="confirm" class="primary" hidden>已逐项核对，保存这份真实持仓</button>
+<h3>各券商已确认的最新持仓</h3><div id="current-holdings"></div>
+<details><summary>CSV 字段示例（不含虚构持仓）</summary><pre>证券代码,证券名称,持仓数量,成本价,市值,浮动盈亏,可用资金</pre><p class="footnote">缺失金额留空，日期在上方填写；请优先使用券商原始结构化导出。无法识别的字段会明确报错。</p></details>
+</section>
+<section id="history" class="page" hidden><h2>报告历史</h2><p class="muted">每次分析形成独立记录，最新报告不会覆盖过去结果。</p><div id="history-list"></div></section>
+<footer><a href="/">原养鹅研究 · 账本与加密备份</a><span>本地优先 · 不自动上传</span></footer>
+</main><script src="/investment/app.js" defer></script></body></html>
