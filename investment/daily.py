@@ -25,12 +25,13 @@ def _sessions(day):
 
 
 def schedule_plan(*, now=None):
+    from goose_research.market import calendar_supported_through
     clock = _clock(now)
     return {"scheduledAt": "14:38:00+08:00", "reportDeadline": "14:44:00+08:00",
         "analysisDeadline": "14:43:30+08:00",
         "targetArrival": "14:45:00+08:00 (delivery is not guaranteed)",
         "taskEnabled": False, "barkEnabled": False, "old1450TaskModified": False,
-        "calendarSupportedThrough": "2026-12-31", "localDate": clock.date().isoformat(),
+        "calendarSupportedThrough": calendar_supported_through(), "localDate": clock.date().isoformat(),
         "missedRunReplay": False, "automaticRetries": False,
         "computerWakeEnabled": False, "requiresComputerOnline": True}
 

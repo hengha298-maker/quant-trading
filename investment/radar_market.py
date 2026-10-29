@@ -13,6 +13,7 @@ import hashlib,json,re,uuid
 from .holdings import _safe_path,_canonical
 from .market import (_attempt,_daily_parser,_decimal,_volume,QUOTE_URL,TENCENT_URL,
                      BJ,xshg_sessions,CALENDAR_SUPPORTED_THROUGH,classify_quote)
+from goose_research.market import calendar_supported_through
 from goose_research.market import validate_dataset,etf_anomaly_diagnostics
 
 def catalog():
@@ -118,7 +119,7 @@ def collect(root,*,now=None,deadline=None,attempt=None):
             stamp=quote['sourceTimestamp'][:10];reference=quote['price'] if stamp==end else quote['previousClose'] if stamp>end and stamp==now.astimezone(BJ).date().isoformat() else None
             if reference is None or abs(D(raw_bars[-1]['close'])-D(reference))>D(spec['tick']):raise ValueError('RADAR_QUOTE_DAILY_SCALE_OR_EXRIGHTS_REFERENCE_REQUIRES_REVIEW')
             raw={'format':'goose-market-dataset','version':1,'symbol':symbol,'kind':spec['kind'],'source':'tencent','sourceUrl':TENCENT_URL,'adjustment':'none','currency':'CNY','priceUnit':'CNY-per-share','fetchedAt':raw_obs['receivedAt'],
-                 'calendar':{'name':'XSHG','sessions':dates,'supportedThrough':CALENDAR_SUPPORTED_THROUGH},'bars':raw_bars,
+                 'calendar':{'name':'XSHG','sessions':dates,'supportedThrough':calendar_supported_through()},'bars':raw_bars,
                  'quality':{'status':'validated','crossValidated':False,'unitVerified':True,'corporateActionsVerified':False,'unitEvidence':'Reviewed exchange price tick/share units plus public quote/raw daily scale consistency, not independent feed certification','warnings':['PRICE_ONLY_NO_VERIFIED_DIVIDEND_TOTAL_RETURN','CURRENT_SURVIVING_MANUAL_POOL_NOT_POINT_IN_TIME_UNIVERSE']}}
             raw=validate_dataset(raw)
             if spec['kind']=='etf' and etf_anomaly_diagnostics(raw)['status']=='blocked':raise ValueError('RADAR_ETF_SCALE_OR_LARGE_MOVE_REVIEW')

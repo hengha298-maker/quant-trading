@@ -54,12 +54,30 @@ def _values(f):
 def build(root,market,portfolio,*,deadline=None):
     if market.get('synthetic') is not False:raise ValueError('RADAR_SYNTHETIC_MARKET_NOT_PRODUCTION')
     cat=market['catalog'];histories=market['histories'];benchmark=histories.get(cat['benchmark']);held={p['symbol'] for p in portfolio.get('positions',[])}
-    held_histories={s:histories.get(s) for s in held};items=[]
+    held_histories={s:histories.get(s) for s in held};items=[];quality_inputs=[]
+    from .corporate_actions import catalog as event_catalog,evidence_status
+    from .trust_research import research as trust_research
+    from .strategy_quality import assess
+    evidence_doc=event_catalog()
     for spec in cat['instruments']:
         symbol=spec['symbol'];history=histories.get(symbol);q=market['quality'][symbol]
         item={**{k:spec[k] for k in ('symbol','name','kind','category')},'through':market['through'],'isHeldInSnapshot':symbol in held,'quality':q,'eligible':False,'rejections':[],'score':None,'lab':None}
+        item['trustResearch']={'status':'unavailable','dataTrustGrade':'C' if history else 'D','dataTrustLabel':'当前历史研究证据不完整' if history else '行情隔离，不参与排名',
+          'sourceEvidence':evidence_status(evidence_doc,symbol,'2024-09-02',market['through'],root),'advantageConclusion':'尚未证明优于买入持有'}
+        item['quarantineReview']=next((r for r in evidence_doc.get('quarantineReviews',[]) if r['symbol']==symbol),None)
         if not history or not benchmark:
-            item['rejections'].append('历史、单位、复权或比较基准未通过核验，暂停排名。');items.append(item);continue
+            item['rejections'].append('历史、单位、复权或比较基准未通过核验，暂停排名。')
+            # A dated raw-only study is not a substitute qfq dataset or a
+            # restoration to today's watchlist. Require an audited interval.
+            if benchmark and any(c['symbol']==symbol for c in evidence_doc['coverage']):
+                try:
+                    from .quarantine_review import archived_raw
+                    archived=archived_raw(root,spec)
+                    item['trustResearch'],_=trust_research(root,archived,benchmark,spec,deadline=deadline)
+                    item['trustResearch']['dataTrustLabel']='仅供明确日期的未复权历史研究；当前行情/复权隔离未解除。'
+                    item['archiveProvenance']=archived['archiveProvenance']
+                except (ValueError,OSError,KeyError):item['trustResearch']['codes']=['ISOLATED_RAW_STUDY_NOT_AVAILABLE']
+            items.append(item);continue
         try:
             with localcontext() as ctx:ctx.prec=45;f=features(history,benchmark,held_histories);s=score(f,spec)
             item.update(features=_values(f),score=s)
@@ -74,6 +92,10 @@ def build(root,market,portfolio,*,deadline=None):
             if symbol in held:item['rejections'].append('已在确认持仓中，列入持仓研究，不冒充新增机会。')
             if f['maximumHoldingCorrelation'] is not None and f['maximumHoldingCorrelation']>=D('.90') and portfolio.get('concentration') is not None and D(portfolio['concentration'])>=50:item['rejections'].append('现有证券快照较集中且同向相关性高，优先核对重复暴露。')
             item['lab']=cached_suite(root,history,benchmark,spec,deadline=deadline)
+            try:
+                item['trustResearch'],study=trust_research(root,history,benchmark,spec,deadline=deadline)
+                if study:quality_inputs.append({'symbol':symbol,'study':study})
+            except (ValueError,OSError,KeyError):item['trustResearch']['codes']=['TRUST_RESEARCH_UNAVAILABLE_NO_COMPLETE_RETURN_CLAIM']
             item['eligible']=not item['rejections']
             item['reasons']=[p['basis'] for p in s['parts'] if p['factor'] in {'趋势','动量与相对强弱','量能','组合分散'}]
             item['trigger']='下一完整交易日继续保持同口径MA20/60趋势与相对强弱；当日盘中报价、资金、目标仓位和实际成本另行核对后才研究方案。'
@@ -82,6 +104,8 @@ def build(root,market,portfolio,*,deadline=None):
         except (ValueError,OSError,KeyError) as exc:
             item['eligible']=False;item['rejections'].append('策略证据或计算未就绪：'+(str(exc) if re.fullmatch(r'[A-Z0-9_]{1,100}',str(exc)) else 'RADAR_COMPUTATION_INVALID'))
         items.append(item)
+    quality_result=assess(quality_inputs) if deadline is None or (deadline-datetime.now(timezone.utc)).total_seconds()>3 else {'status':'not-demonstrated','conclusion':'尚未证明优于买入持有','comparisons':[],'reason':'REPORT_TIME_RESERVED'}
+    for item in items:item['strategyQuality']=[r for r in quality_result['comparisons'] if r['symbol']==item['symbol']]
     groups={};coverage={}
     for kind,minimum in [('etf',5),('stock',4)]:
         valid=[i for i in items if i['kind']==kind and i['score'] is not None and i['lab'] is not None]
@@ -95,6 +119,7 @@ def build(root,market,portfolio,*,deadline=None):
     benchmark_item=next((i for i in items if i['symbol']==cat['benchmark']),None)
     return {'format':'goose-opportunity-radar','version':1,'generatedAt':datetime.now(timezone.utc).isoformat(),'through':market['through'],
       'status':'ready' if all(g['status']=='ready' for g in groups.values()) and all(histories.get(s['symbol']) is not None for s in cat['instruments']) else 'partial','synthetic':False,'coverage':coverage,'groups':groups,'items':items,
+      'strategyQuality':quality_result,
       'benchmark':{'symbol':cat['benchmark'],'basis':'沪深300ETF未复权价格路径代理，含基金跟踪费用影响，不等于指数总回报','comparison':benchmark_item['lab']['strategies']['buy_hold'] if benchmark_item and benchmark_item['lab'] else None},
       'accountConstraints':{'snapshotAsOf':portfolio.get('asOf'),'snapshotStatus':portfolio.get('status'),'securitiesConcentrationPct':portfolio.get('concentration'),
         'cashVerifiedCurrent':portfolio.get('status')=='current-user-confirmed' and portfolio.get('availableCash') is not None,'buyQuantity':None,'singleTradeBudget':None,

@@ -9,6 +9,7 @@ Use the existing Start-Investment.cmd entry. This change adds no application or 
 - End-of-day statements and evidence-gated quantity, cash, acquisition cost, realized/unrealized profit and dividend reconciliation. Calculations distinguish execution, settlement and actual credit dates. Confirmed execution times order same-day trades; ambiguous order pauses cost calculations.
 - Conditional research plugins, price-history metrics and separately labelled historical backtests. Price returns are not verified dividend-inclusive strategy returns. New research rules do not inherit validation from older strategies.
 - Separate ETF/stock opportunity radar, reviewed history refresh, explainable fixed-factor scores, portfolio-aware exclusions and five fixed-rule comparisons with chronological historical holdouts. Full authenticated research artifacts include curves and assumed costs; see [radar methods and limitations](RADAR.md).
+- Reviewed public corporate-event evidence, strictly bounded dividend-retention/reinvestment studies, causal signal comparisons and dependent-return uncertainty diagnostics. Missing current coverage remains explicit; see [cash-flow methods, point-in-time limits and calendar review](CORPORATE-ACTIONS.md).
 - Existing private views display research, accounts, evidence quality and runtime status. No broker order or cancellation interface is exposed. Official account authorization and real export-format acceptance remain external prerequisites.
 
 ## Complete backup and recovery

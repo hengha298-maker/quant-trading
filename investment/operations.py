@@ -55,7 +55,9 @@ def automation_status(root,task_reader=None):
  else:task=_task_status();_cached=task;_cached_at=time.monotonic()
  try:control=pause_state(root)
  except (ValueError,OSError):control={'paused':True,'error':'PAUSE_STORE_INVALID'}
+ from goose_research.market import calendar_supported_through
+ supported=calendar_supported_through()
  return {'enabled':task.get('enabled'),'task':task,'control':control,'schedule':schedule_plan(),'latest':latest_daily(root),
   'mode':'real-account-readonly-analysis','executionEnabled':False,
   'brokerAccess':{'华宝证券':'本人权限尚未核实，未连接券商账户','银河证券':'本人权限尚未核实，未连接券商账户'},
-  'calendar':{'verifiedThrough':'2026-12-31','nextYear':'2027官方完整休市表尚未核验，仍阻断，不按周一至周五猜测'}}
+  'calendar':{'verifiedThrough':supported,'nextYear':'2027官方完整休市表尚未核验，仍阻断，不按周一至周五猜测' if supported<'2027-12-31' else '未来日历来自完整逐日分类及官方来源复核；下载草稿不自动启用。'}}

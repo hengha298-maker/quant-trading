@@ -4,7 +4,7 @@ from decimal import Decimal
 from email.utils import parsedate_to_datetime
 import re
 
-from goose_research.market import BJ, xshg_sessions, validate_dataset
+from goose_research.market import BJ, xshg_sessions, validate_dataset, calendar_supported_through
 from .network import SYMBOL, SOURCES, decimal_text
 
 MAX_AGE_SECONDS = 90
@@ -39,7 +39,7 @@ def context(now):
     codes = []
     try:
         session = day in xshg_sessions(day, day)
-        calendar = 'reviewed-through-2026-12-31'
+        calendar = 'reviewed-through-'+calendar_supported_through()
     except ValueError:
         session, calendar = False, 'unverified-or-unavailable'
         codes.append('CALENDAR_UNVERIFIED_STOP')

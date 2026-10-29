@@ -22,6 +22,7 @@ class RadarTests(unittest.TestCase):
     def setUp(self):
         self.m=market();self.portfolio={'asOf':'2026-10-28','status':'stale-snapshot','availableCash':None,'concentration':'60','positions':[{'symbol':'510000.SH'}]}
         self.lab=patch('investment.radar.cached_suite',return_value={'strategies':{'buy_hold':{}},'fixture':True});self.lab.start();self.addCleanup(self.lab.stop)
+        self.trust=patch('investment.trust_research.research',return_value=({'status':'unavailable','fixture':True},None));self.trust.start();self.addCleanup(self.trust.stop)
 
     def test_explainable_score_not_probability_and_cash_not_budget(self):
         r=radar.build('unused',self.m,self.portfolio)

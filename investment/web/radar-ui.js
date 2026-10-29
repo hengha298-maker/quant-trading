@@ -24,13 +24,19 @@ export function renderRadar(report){
   const candidates=group?.candidates||[];
   if(!candidates.length)paragraph(card,group?.message||'暂无符合条件的机会','notice');
   for(const item of candidates){const d=node('details',null,'scenario');d.append(node('summary',`${item.name} ${item.symbol} · 研究分 ${item.score.value}/100`));
+   const trust=item.trustResearch;paragraph(d,`数据可信等级 ${trust?.dataTrustGrade||'未评定'}：${trust?.dataTrustLabel||'证据尚未补齐'}。`,'warning');
+   paragraph(d,'评分是条件研究排序，不是胜率或买入建议。');
+   if(trust){paragraph(d,trust.sourceEvidence?.complete?'当前研究区间现金流覆盖完整；价格版本与点时证据仍需区分。':`当前完整含息回测未通过覆盖检查${trust.verifiedWindow?'；仅'+trust.verifiedWindow.from+'—'+trust.verifiedWindow.to+'有核验区间结果':''}。`);paragraph(d,trust.advantageConclusion||'尚未证明优于买入持有','warning');}
+   const tests=item.strategyQuality||[];
+   if(tests.length)d.append(table(['规则','留出价格收益超出买入持有','证据结论'],tests.map(s=>[names[s.strategy],s.folds.test?bpsDisplay(s.folds.test.excessReturnBps):'无完整留出',s.conclusion])));
    paragraph(d,`历史抓取 ${item.quality?.historyFetchedAt||'见研究文件'}；公开报价源时刻 ${item.quality?.quote?.sourceTimestamp||'未取得'}。`,'meta');
    for(const reason of item.reasons||[])paragraph(d,reason);paragraph(d,'触发关注：'+item.trigger);paragraph(d,'失效条件：'+item.invalidation);
    for(const risk of item.risks||[])paragraph(d,risk,'footnote');d.append(table(['评分项','得分','依据'],item.score.parts.map(p=>[p.factor,`${p.points}/${p.maxPoints}`,p.basis])));card.append(d);
   }
  }
  const all=node('details');all.append(node('summary','查看全部观察池与未入选原因'));
- all.append(table(['标的','类型/分数','数据日期/状态','未入选原因'],(r.items||[]).map(i=>[i.name+' '+i.symbol,i.kind+' / '+(i.score?.value??'未评分'),(i.through||'未知')+' / '+(i.quality?.status||'未知'),[...(i.quality?.codes||[]),...(i.rejections||[])].join('；')||'通过研究门槛'])));card.append(all);
+ all.append(table(['标的','类型/分数','数据日期/状态','未入选原因'],(r.items||[]).map(i=>[i.name+' '+i.symbol,i.kind+' / '+(i.score?.value??'未评分'),(i.through||'未知')+' / '+(i.quality?.status||'未知'),[...(i.quality?.codes||[]),...(i.rejections||[]),i.quarantineReview?.cause,i.quarantineReview?.remaining].filter(Boolean).join('；')||'通过研究门槛'])));card.append(all);
+ if(r.strategyQuality)paragraph(card,'策略质量结论：'+r.strategyQuality.conclusion+'。同类标的收益相关，胜出次数不能当作独立统计证据。','warning');
  for(const note of r.limitations||[])paragraph(card,note,'footnote');target.append(card);
 }
 export function renderLabs(report,request){
@@ -49,6 +55,57 @@ export function renderLabs(report,request){
    sub.append(table(['策略','区间','收益','年化收益','波动(252日换算)','回撤幅度','夏普(Rf=0)','次数','单边换手'],Object.entries(lab.strategies).filter(([,s])=>s.applicable!==false).map(([name,s])=>{const p=s.partitions[key],m=p.metrics;return[names[name],p.from+'—'+p.to,bpsDisplay(m.totalReturnBps),m.annualizedReturnBps==null?'期限不足不年化':bpsDisplay(m.annualizedReturnBps),bpsDisplay(m.volatilityBps),bpsDisplay(m.maxDrawdownBps),m.sharpeRfZero??'未知',m.tradeCount,percentDisplay(m.oneWayTurnoverPct)];})));detail.append(sub);
   }
   for(const note of lab.limitations)paragraph(detail,note,'footnote');const button=node('button','下载完整资金曲线、信号及成交记录');button.addEventListener('click',async()=>{try{const data=await request('radar-lab/'+lab.artifactKey);const url=URL.createObjectURL(new Blob([JSON.stringify(data)],{type:'application/json'})),a=node('a');a.href=url;a.download='goose-lab-'+item.symbol+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),2000);}catch{paragraph(detail,'研究文件暂不可读取，未用其他文件替代。','warning');}});detail.append(button);panel.append(detail);
+ }
+ target.prepend(panel);
+ renderTrust(report,request);
+}
+
+function downloadStudy(box,study,request){
+ const button=node('button','下载此区间完整含息／价格研究记录');
+ button.addEventListener('click',async()=>{try{const data=await request('radar-lab/'+study.artifactKey);const url=URL.createObjectURL(new Blob([JSON.stringify(data)],{type:'application/json'})),a=node('a');a.href=url;a.download='goose-event-return-'+study.symbol+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),2000);}catch{paragraph(box,'研究原件暂不可读取，未用其他记录代替。','warning');}});box.append(button);
+}
+function metricsByMode(box,study,request){
+ paragraph(box,`同区间 ${study.from}—${study.to}；研究账户，与券商真实投资收益分开。`);
+ if(study.synthetic)paragraph(box,'完全虚构的测试研究，不是真实证券表现。','warning');
+ paragraph(box,study.taxAssumption,'footnote');
+ if(study.benchmarkActionCoverage?.complete===false)paragraph(box,'比较基准的企业行为覆盖尚未完整；相对动量和市场代理比较不能冒充完整含息超额收益。','warning');
+ const modes=study.modes||{},price=modes.price||{},cash=modes.cash||{},reinvest=modes.reinvest||{};
+ if(Object.values(cash).some(s=>s.cashSettledAtEnd===false))paragraph(box,'期末仍有按公告确认的未到账应收分红，计入研究净值但不可用于下单，不等于券商现金到账。','warning');
+ box.append(table(['规则','含费用价格收益','含息留存收益','含息再投收益','留存回撤','留存夏普(Rf=0)','留存费用+滑点'],Object.entries(price).filter(([,s])=>s.applicable!==false).map(([key,p])=>{
+  const c=cash[key]?.metrics,r=reinvest[key]?.metrics;return[names[key],bpsDisplay(p.metrics.totalReturnBps),c?bpsDisplay(c.totalReturnBps):'证据不足不计算',r?bpsDisplay(r.totalReturnBps):'证据不足不计算',c?bpsDisplay(c.maxDrawdownBps):'—',c?.sharpeRfZero??'—',c?moneyDisplay(String(Number(c.cost)/100)):'—'];
+ })));
+ if(modes['cash-before-dividend-tax'])box.append(table(['规则','分红税前留存收益(已计交易费)','统一税负假设后留存收益'],Object.entries(modes['cash-before-dividend-tax']).filter(([,s])=>s.applicable!==false).map(([name,s])=>[names[name],bpsDisplay(s.metrics.totalReturnBps),bpsDisplay(cash[name].metrics.totalReturnBps)])));
+ for(const [fold,label] of [['train','训练'],['validation','验证'],['test','历史留出']]){
+  const detail=node('details');detail.append(node('summary',label+'：同区间价格与现金流比较'));
+  detail.append(table(['规则','日期','价格收益','含息留存','含息再投','留存波动','留存换手','年化收益'],Object.entries(price).filter(([,s])=>s.applicable!==false).map(([name,s])=>{
+   const p=s.partitions[fold],c=cash[name]?.partitions[fold],r=reinvest[name]?.partitions[fold];return[names[name],p?p.from+'—'+p.to:'无覆盖区间',p?bpsDisplay(p.metrics.totalReturnBps):'—',c?bpsDisplay(c.metrics.totalReturnBps):'未核验',r?bpsDisplay(r.metrics.totalReturnBps):'未核验',c?bpsDisplay(c.metrics.volatilityBps):'—',c?percentDisplay(c.metrics.oneWayTurnoverPct):'—',c?.metrics.annualizedReturnBps==null?'期限不足或未核验':bpsDisplay(c.metrics.annualizedReturnBps)];
+  })));box.append(detail);
+ }
+ for(const note of study.limitations||[])paragraph(box,note,'footnote');downloadStudy(box,study,request);
+}
+export function renderTrust(report,request){
+ const target=document.getElementById('research-report'),radar=report?.opportunityRadar;if(!target||!radar?.items?.some(i=>i.trustResearch))return;
+ const panel=node('article',null,'card');panel.append(node('h3','可信回测 · 企业行为与现金分红'));
+ paragraph(panel,'原价格回测保留在下方。新研究使用不回写历史的因果事件指数产生信号，原始价格成交；现金分红独立记账，避免与前复权收益重复相加。');
+ paragraph(panel,'尚未证明优于买入持有。价格历史版本、观察池点时成员、特殊成交规则与完整企业行为仍有限制；不显示高胜率标签。','warning');
+ for(const item of radar.items){const trust=item.trustResearch;if(!trust)continue;const d=node('details');d.append(node('summary',item.name+' '+item.symbol+' · 可信等级'+(trust.dataTrustGrade||'待评定')));
+  paragraph(d,trust.dataTrustLabel,'warning');const evidence=trust.sourceEvidence;
+  if(evidence){paragraph(d,`核验范围 ${evidence.from}—${evidence.to}；已核验事件 ${evidence.verifiedEvents}；当前区间完整性 ${evidence.complete?'通过现金流覆盖检查':'未通过'}。`);
+   if(evidence.missingIntervals?.length)paragraph(d,'缺失覆盖：'+evidence.missingIntervals.map(g=>g.from+'—'+g.to).join('；'),'footnote');
+   if(evidence.missingSourceIds?.length)paragraph(d,'本机原始证据缺失或哈希不符，不能凭缓存宣称完整。','warning');
+   const events=evidence.events||[];
+   if(events.length)d.append(table(['事件','事前公告/可用日期','登记/除权日','发放/新增份额可用日','金额/比例'],events.map(e=>[e.type,e.announcementDate+' / '+e.availableFrom,e.recordDate?e.recordDate+' / '+e.exDate:(e.startDate+'—'+e.endDate),e.payDate||e.shareAvailableDate||e.resumeDate||'未知',e.cashPerShare?e.cashPerShare+'元/股(份)':e.shareMultiplier?'份额乘'+e.shareMultiplier:'不可交易区间'])));
+   const sources=node('details');sources.append(node('summary','官方来源、定位与完整性依据'));
+   for(const s of evidence.sources||[]){const p=node('p',null,'footnote'),a=node('a',s.publicationDate+' · '+s.locator);try{const u=new URL(s.url);if(u.protocol==='https:'&&!u.username&&!u.password){a.href=u.href;a.target='_blank';a.rel='noopener noreferrer';}}catch{}p.append(a,node('span',' · SHA256 '+s.sha256.slice(0,12)+'…'));sources.append(p);}d.append(sources);
+  }
+  if(trust.current){const current=node('details');current.append(node('summary','当前期限：因果信号与价格回测'));metricsByMode(current,trust.current,request);d.append(current);}
+  if(trust.verifiedWindow){const verified=node('details');verified.append(node('summary','已核验日期区间：现金分红留存／再投资'));metricsByMode(verified,trust.verifiedWindow,request);d.append(verified);}
+  if(!trust.verifiedWindow)paragraph(d,'未取得完整企业行为区间，未输出该标的完整含息收益。','footnote');
+  const quality=item.strategyQuality||[];
+  if(quality.length){const q=node('details');q.append(node('summary','历史留出不确定性：成对分块与多重比较'));
+   q.append(table(['规则','留出价格超额收益','10日分块日超额均值95%区间(bps)','Holm校正p','20日分块敏感性','结论'],quality.map(s=>{const t=s.folds.test,a=t?.blocks?.[0],b=t?.blocks?.[1];return[names[s.strategy],t?bpsDisplay(t.excessReturnBps):'无完整留出',a?.meanDailyExcess95Bps?.join(' 至 ')??'样本不足',a?.holmAdjustedP??'未计算',b?.meanDailyExcess95Bps?.join(' 至 ')??'样本不足',s.conclusion];})));paragraph(q,'这是因果信号价格账户的回顾性比较，未冒充当前区间完整含息优势。证券收益并非独立；分块近似仍依赖平稳性。重复比较已作Holm校正，不能把简单胜出次数当作证明。','footnote');d.append(q);}
+  if(item.quarantineReview){paragraph(d,'隔离复核：'+item.quarantineReview.cause);paragraph(d,'仍需：'+item.quarantineReview.remaining,'footnote');}
+  for(const code of trust.codes||[])paragraph(d,'本次研究未就绪：'+code,'footnote');panel.append(d);
  }
  target.prepend(panel);
 }

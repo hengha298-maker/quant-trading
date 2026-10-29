@@ -53,8 +53,16 @@ import hashlib
 lab=run_suite(history('510050.SH'),history(),SPEC,allow_synthetic=True)
 key=lab['inputHash'];lab_summary=summarized(lab,key)
 candidate={'name':'FICTIONAL ETF 测试','symbol':'510050.SH','kind':'etf','through':day,'quality':{'status':'fictional-ui-only'},'score':{'value':70,'parts':[{'factor':'虚构指标','points':70,'maxPoints':100,'basis':'完全虚构的界面测试'}]},'reasons':['FICTIONAL 仅测试显示'],'trigger':'FICTIONAL 观察条件','invalidation':'FICTIONAL 失效条件','risks':['不是投资研究结果'],'rejections':[],'lab':lab_summary}
+from investment.total_return import compare
+from investment.trust_research import summarize as trust_summary
+from investment.radar_market import complete_session
+fictional_doc={'format':'goose-corporate-actions','version':1,'sources':{'fixture':{'url':'https://www.sse.com.cn/FICTIONAL-UNIT-TEST.pdf','sha256':'a'*64,'publicationDate':'2024-01-01','locator':'FICTIONAL UI ONLY','file':'fictional.pdf'}},'events':[],'coverage':[{'symbol':'510050.SH','from':'2024-01-01','to':'2026-12-31','status':'reviewed-complete-interval','types':['cash-dividend','share-ratio'],'sourceIds':['fixture'],'eventIds':[]}]}
+trust_study=compare(history('510050.SH')['raw'],history()['raw'],SPEC,fictional_doc,allow_synthetic=True)
+trust_key=hashlib.sha256(b'FICTIONAL-TRUST-STUDY').hexdigest();trust_study['inputHash']=trust_key
+candidate['through']=complete_session(now)
+candidate['trustResearch']={'status':'ready','dataTrustGrade':'TEST','dataTrustLabel':'FICTIONAL 完全虚构的证据展示','advantageConclusion':'尚未证明优于买入持有','sourceEvidence':{'from':'2024-09-02','to':trust_study['to'],'verifiedEvents':0,'complete':False,'missingIntervals':[{'from':'2026-01-01','to':trust_study['to']}],'sources':[],'events':[]},'current':trust_summary(trust_study,trust_key),'verifiedWindow':trust_summary(trust_study,trust_key)}
 report['testData']=True
-report['opportunityRadar']={'synthetic':False,'through':day,'groups':{'etf':{'candidates':[candidate]},'stock':{'candidates':[],'message':'暂无符合条件的机会'}},'items':[candidate],'limitations':['FICTIONAL TEST ONLY']}
+report['opportunityRadar']={'synthetic':False,'through':complete_session(now),'groups':{'etf':{'candidates':[candidate]},'stock':{'candidates':[],'message':'暂无符合条件的机会'}},'items':[candidate],'limitations':['FICTIONAL TEST ONLY']}
 for instrument in report['instruments']:
  instrument['name']=next(p['name'] for p in holdings['positions'] if p['symbol']==instrument['symbol'])
 work=root/'investment'/'work';work.mkdir(exist_ok=True)
@@ -65,6 +73,7 @@ with tempfile.TemporaryDirectory(prefix='fictional-browser-',dir=work) as temp:
  (run/'report.json').write_text(json.dumps(report,ensure_ascii=False),encoding='utf8')
  labdir=fake/'investment/work/radar/labs';labdir.mkdir(parents=True)
  (labdir/(key+'.json')).write_bytes(_canonical({'result':lab,'sha256':hashlib.sha256(_canonical(lab)).hexdigest()}))
+ (labdir/(trust_key+'.json')).write_bytes(_canonical({'result':trust_study,'sha256':hashlib.sha256(_canonical(trust_study)).hexdigest()}))
  (run/'goose-report-v31.json').write_text(json.dumps(compatible_report(report),ensure_ascii=False),encoding='utf8')
  server=make_server(fake,port=int(sys.argv[2]),access_key=sys.argv[3],analyze=lambda _:report)
  thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
@@ -96,6 +105,7 @@ async function main(){
     assert.ok((await page.locator('#opportunity-radar').innerText()).includes('每日投资机会雷达'));
     assert.ok((await page.locator('#opportunity-radar').innerText()).includes('暂无符合条件的机会'));
     const candidate=page.locator('#opportunity-radar .scenario').first();await candidate.locator('summary').click();assert.match(await candidate.innerText(),/FICTIONAL 失效条件/);
+    assert.match(await candidate.innerText(),/尚未证明优于买入持有/);assert.match(await candidate.innerText(),/当前完整含息回测未通过覆盖检查/);
     const titles=await page.locator('#report .instrument > .report-head h3').allTextContents();
     for(const [i,code] of ['600900','515450'].entries())assert.equal((titles[i].match(new RegExp(code,'g'))||[]).length,1,'stock code duplicated within label');
     const content=await page.locator('#report').innerText();
@@ -110,11 +120,13 @@ async function main(){
     assert.ok(layout.width<=layout.viewport+1&&layout.body<=layout.viewport+1,'390px viewport overflow: '+JSON.stringify(layout));
     assert.equal(await page.locator('nav .tab').count(),4);
     await page.locator('[data-page="research"]').click();
-    assert.equal(await page.locator('#research-report .card').count(),3);
+    assert.equal(await page.locator('#research-report .card').count(),4);
     assert.ok((await page.locator('#research-report').innerText()).includes('MA60'));
     assert.equal(await page.locator('#research-report svg').count(),3);
-    const lab=page.locator('#research-report .card').first();await lab.locator('details > summary').first().click();assert.match(await lab.innerText(),/固定规则|留出收益/);
+    const lab=page.locator('#research-report .card').filter({hasText:'固定规则策略实验室'}).first();await lab.locator('details > summary').first().click();assert.match(await lab.innerText(),/固定规则|留出收益/);
     const labDownload=page.waitForEvent('download');await lab.getByRole('button',{name:'下载完整资金曲线、信号及成交记录'}).click();assert.ok(JSON.parse(fs.readFileSync(await (await labDownload).path(),'utf8')).result.synthetic);
+    const trusted=page.locator('#research-report .card').filter({hasText:'可信回测 · 企业行为与现金分红'}).first();await trusted.locator('details > summary').first().click();await trusted.locator('summary').filter({hasText:'当前期限：因果信号与价格回测'}).click();assert.match(await trusted.innerText(),/含息留存收益/);assert.match(await trusted.innerText(),/完全虚构的测试研究/);
+    const trustDownload=page.waitForEvent('download');await trusted.getByRole('button',{name:'下载此区间完整含息／价格研究记录'}).click();assert.ok(JSON.parse(fs.readFileSync(await (await trustDownload).path(),'utf8')).result.synthetic);
     await page.locator('[data-page="holdings"]').click();
     await page.locator('#broker').selectOption('华宝证券');
     await page.locator('#trade-start').fill('2026-10-27');await page.locator('#trade-end').fill('2026-10-28');

@@ -1,0 +1,387 @@
+{
+  "format": "goose-corporate-actions",
+  "version": 1,
+  "reviewedAt": "2026-10-29T16:28:09.945484+00:00",
+  "sources": {
+    "515450-2024-annual": {
+      "url": "https://static.cninfo.com.cn/finalpage/2025-03-31/1222963588.PDF",
+      "sha256": "d42670f6de8b7db258e1eac5e9e9f74676c3c78c8d10b459f7be166bd5173281",
+      "publicationDate": "2025-03-31",
+      "locator": "PDF pages 42,64; sections 7.4.11 and 10",
+      "file": "515450-2024-annual.pdf",
+      "archiveKind": "original-document",
+      "fetchedAt": "2026-10-29T15:37:11.077201+00:00"
+    },
+    "515450-2025-annual": {
+      "url": "https://www.sse.com.cn/disclosure/fund/announcement/c/new/2026-03-31/515450_20260331_CEPE.pdf",
+      "sha256": "e8d3736ef71e68ac3fc25b18e295f58e7d797ac881c96b052ef9cfa8f5b39bb5",
+      "publicationDate": "2026-03-31",
+      "locator": "PDF pages 14,42,64; sections 4.8,7.4.11,10",
+      "file": "515450-2025-annual.pdf",
+      "archiveKind": "original-document",
+      "fetchedAt": "2026-10-29T15:30:31.099736+00:00"
+    },
+    "515450-202407-dividend": {
+      "url": "https://www.sse.com.cn/disclosure/fund/announcement/c/new/2024-07-17/515450_20240717_RZZA.pdf",
+      "sha256": "8cf2f9ff4c3ba3f2ef9c38945dda6129f53802b09e29da1c48353f97ceb50f52",
+      "publicationDate": "2024-07-17",
+      "locator": "PDF pages 1-3; announcement, record/ex/payment and tax",
+      "file": "515450-202407-dividend.pdf",
+      "archiveKind": "original-document",
+      "fetchedAt": "2026-10-29T15:42:56.189934+00:00"
+    },
+    "515450-202412-dividend": {
+      "url": "https://www.sse.com.cn/disclosure/fund/announcement/c/new/2024-12-12/515450_20241212_LFDQ.pdf",
+      "sha256": "394b37dc455d5b1016300581658f46db5a037c096ecb6e6c4df25b3c6a603a1c",
+      "publicationDate": "2024-12-12",
+      "locator": "PDF pages 1-3; announcement, record/ex/payment and tax",
+      "file": "515450-202412-dividend.pdf",
+      "archiveKind": "original-document",
+      "fetchedAt": "2026-10-29T15:42:56.089972+00:00"
+    },
+    "515450-202507-dividend": {
+      "url": "https://www.sse.com.cn/disclosure/fund/announcement/c/new/2025-07-10/515450_20250710_BFVG.pdf",
+      "sha256": "981306f054d090effe4eaf0d17450ca9e916292f180bfab017070f80cf2f9092",
+      "publicationDate": "2025-07-10",
+      "locator": "PDF pages 1-3; announcement, record/ex/payment and tax",
+      "file": "515450-202507-dividend.pdf",
+      "archiveKind": "original-document",
+      "fetchedAt": "2026-10-29T15:30:31.442339+00:00"
+    },
+    "515450-202512-dividend": {
+      "url": "https://www.nffund.com/nfwebApi/DownLoader.java?fileName=515450&filePath=%2Fmain%2Ffiles%2F2025%2F12%2F09%2F696758495775.pdf&utf8=1",
+      "sha256": "a9b3278eec6714610b62e30f3ebb092db178431beb78ce9de18ea15b0e2a7072",
+      "publicationDate": "2025-12-10",
+      "locator": "PDF pages 1-3; announcement, record/ex/payment and tax",
+      "file": "515450-202512-dividend.pdf",
+      "archiveKind": "original-document",
+      "fetchedAt": "2026-10-29T15:37:09.987219+00:00"
+    },
+    "512800-split-plan": {
+      "url": "https://www.fsfund.com/webimages/upload2012/2025/06/30/cb0fbc1a-dd92-4905-8350-4475163d457b/%E5%8D%8E%E5%AE%9D%E5%9F%BA%E9%87%91%E7%AE%A1%E7%90%86%E6%9C%89%E9%99%90%E5%85%AC%E5%8F%B8%E5%85%B3%E4%BA%8E%E5%8D%8E%E5%AE%9D%E4%B8%AD%E8%AF%81%E9%93%B6%E8%A1%8C%E4%BA%A4%E6%98%93%E5%9E%8B%E5%BC%80%E6%94%BE%E5%BC%8F%E6%8C%87%E6%95%B0%E8%AF%81%E5%88%B8%E6%8A%95%E8%B5%84%E5%9F%BA%E9%87%91%E5%AE%9E%E6%96%BD%E5%9F%BA%E9%87%91%E4%BB%BD%E9%A2%9D%E6%8B%86%E5%88%86%E5%B9%B6%E8%B0%83%E6%95%B4%E6%9C%80%E5%B0%8F%E7%94%B3%E8%B4%AD%E3%80%81%E8%B5%8E%E5%9B%9E%E5%8D%95%E4%BD%8D%E5%8F%8A%E7%9B%B8%E5%85%B3%E4%B8%9A%E5%8A%A1%E5%AE%89%E6%8E%92%E7%9A%84%E5%85%AC%E5%91%8A.pdf",
+      "sha256": "de55623bbe0c234f06f69ee040480058587c98c3f7d3bb5e78e9740d2d09eaa2",
+      "publicationDate": "2025-07-01",
+      "locator": "PDF page 1: record July 4, ex July 7, ratio 1:2",
+      "file": "512800-split-plan.pdf",
+      "archiveKind": "original-document",
+      "fetchedAt": "2026-10-29T15:46:01.257020+00:00"
+    },
+    "512800-split-result": {
+      "url": "https://www.sse.com.cn/disclosure/fund/announcement/c/new/2025-07-07/512800_20250707_PJ9L.pdf",
+      "sha256": "376d2aa07064732839ca8cdcaa8a203bf2bc49902d38a79bb3bb2984760f7292",
+      "publicationDate": "2025-07-07",
+      "locator": "PDF page 1: actual registered quantity doubled; not pre-event availability evidence",
+      "file": "512800-split-result.pdf",
+      "archiveKind": "original-document",
+      "fetchedAt": "2026-10-29T15:30:30.011993+00:00"
+    },
+    "600900-202607-dividend-cninfo": {
+      "url": "https://static.cninfo.com.cn/finalpage/2026-07-10/1225416894.PDF",
+      "sha256": "e313badb273b2e50b3a3c24d71103829d36e84b386b1dba8a504a57cd6e9830f",
+      "publicationDate": "2026-07-10",
+      "locator": "PDF pages 1-3: gross dividend, record/ex/pay dates and differentiated tax",
+      "file": "600900-202607-dividend-cninfo.pdf",
+      "archiveKind": "original-document",
+      "fetchedAt": "2026-10-29T15:45:58.909417+00:00"
+    },
+    "512660-2025-annual": {
+      "url": "https://dataclouds.cninfo.com.cn/sjother2/fund/2026/20260331/b7f281f336c34fd8a922036210b43a5f.pdf",
+      "sha256": "faac53d7f86222fb4e3f1b4ed648592d920f33b245282e8b1d03b076e3559fdd",
+      "publicationDate": "2026-03-31",
+      "locator": "PDF pages 9,43,66: no distributions in past three years; no share split in 2025",
+      "file": "512660-2025-annual.pdf",
+      "archiveKind": "original-document",
+      "fetchedAt": "2026-10-29T15:37:12.443467+00:00"
+    },
+    "601088-suspend": {
+      "url": "https://static.cninfo.com.cn/finalpage/2025-08-02/1224369333.PDF",
+      "sha256": "9ca70d040340ce388fa1ce8e1686c30d92b9a476052d27ac1efd46215d84d037",
+      "publicationDate": "2025-08-02",
+      "locator": "PDF page 1: suspension begins August 4",
+      "file": "601088-suspend.pdf",
+      "archiveKind": "original-document",
+      "fetchedAt": "2026-10-29T15:51:38.236409+00:00"
+    },
+    "601088-resume": {
+      "url": "https://static.cninfo.com.cn/finalpage/2025-08-16/1224500923.PDF",
+      "sha256": "c211e564b0be57895c8e5d3b50c8eac7d44a215bd2131e27a47143c3e121576c",
+      "publicationDate": "2025-08-16",
+      "locator": "PDF page 1: suspension ends August 15, resumes August 18",
+      "file": "601088-resume.pdf",
+      "archiveKind": "original-document",
+      "fetchedAt": "2026-10-29T15:50:15.922086+00:00"
+    },
+    "600900-202507-dividend": {
+      "url": "https://static.cninfo.com.cn/finalpage/2025-07-11/1224131238.PDF",
+      "sha256": "016ff3a428cd28446b6925b7129ac81ae5766ad100ec99893da4081fd4cfaa8b",
+      "publicationDate": "2025-07-11",
+      "locator": "PDF page 1; original implementation notice and record/ex/payment table",
+      "file": "600900-202507-dividend.pdf",
+      "archiveKind": "original-document",
+      "fetchedAt": "2026-10-29T16:19:01.387495+00:00"
+    },
+    "600900-202602-dividend": {
+      "url": "https://static.cninfo.com.cn/finalpage/2026-02-05/1224966232.PDF",
+      "sha256": "31e82e6b3f2d33aa21b2b9e94426459ce2b7e3f9d260d9129925e1e31c1a06ba",
+      "publicationDate": "2026-02-05",
+      "locator": "PDF page 1; original implementation notice and record/ex/payment table",
+      "file": "600900-202602-dividend.pdf",
+      "archiveKind": "original-document",
+      "fetchedAt": "2026-10-29T16:19:01.119011+00:00"
+    }
+  },
+  "events": [
+    {
+      "id": "515450-202407",
+      "symbol": "515450.SH",
+      "type": "cash-dividend",
+      "status": "verified",
+      "announcementDate": "2024-07-17",
+      "availableFrom": "2024-07-18T09:30:00+08:00",
+      "recordDate": "2024-07-19",
+      "exDate": "2024-07-22",
+      "payDate": "2024-07-25",
+      "cashPerShare": "0.05",
+      "taxTreatment": "ETF cash distribution temporarily exempt as stated in original announcement; not a broker receipt",
+      "sourceIds": [
+        "515450-202407-dividend"
+      ]
+    },
+    {
+      "id": "515450-202412",
+      "symbol": "515450.SH",
+      "type": "cash-dividend",
+      "status": "verified",
+      "announcementDate": "2024-12-12",
+      "availableFrom": "2024-12-13T09:30:00+08:00",
+      "recordDate": "2024-12-16",
+      "exDate": "2024-12-17",
+      "payDate": "2024-12-20",
+      "cashPerShare": "0.055",
+      "taxTreatment": "ETF cash distribution temporarily exempt as stated in original announcement; not a broker receipt",
+      "sourceIds": [
+        "515450-202412-dividend"
+      ]
+    },
+    {
+      "id": "515450-202507",
+      "symbol": "515450.SH",
+      "type": "cash-dividend",
+      "status": "verified",
+      "announcementDate": "2025-07-10",
+      "availableFrom": "2025-07-11T09:30:00+08:00",
+      "recordDate": "2025-07-14",
+      "exDate": "2025-07-15",
+      "payDate": "2025-07-18",
+      "cashPerShare": "0.045",
+      "taxTreatment": "ETF cash distribution temporarily exempt as stated in original announcement; not a broker receipt",
+      "sourceIds": [
+        "515450-202507-dividend"
+      ]
+    },
+    {
+      "id": "515450-202512",
+      "symbol": "515450.SH",
+      "type": "cash-dividend",
+      "status": "verified",
+      "announcementDate": "2025-12-10",
+      "availableFrom": "2025-12-11T09:30:00+08:00",
+      "recordDate": "2025-12-12",
+      "exDate": "2025-12-15",
+      "payDate": "2025-12-18",
+      "cashPerShare": "0.03",
+      "taxTreatment": "ETF cash distribution temporarily exempt as stated in original announcement; not a broker receipt",
+      "sourceIds": [
+        "515450-202512-dividend"
+      ]
+    },
+    {
+      "id": "512800-202507-split",
+      "symbol": "512800.SH",
+      "type": "share-ratio",
+      "status": "verified",
+      "announcementDate": "2025-07-01",
+      "availableFrom": "2025-07-02T09:30:00+08:00",
+      "recordDate": "2025-07-04",
+      "exDate": "2025-07-07",
+      "shareMultiplier": "2",
+      "shareAvailableDate": "2025-07-07",
+      "sourceIds": [
+        "512800-split-plan",
+        "512800-split-result"
+      ]
+    },
+    {
+      "id": "600900-202607",
+      "symbol": "600900.SH",
+      "type": "cash-dividend",
+      "status": "verified",
+      "announcementDate": "2026-07-10",
+      "availableFrom": "2026-07-13T09:30:00+08:00",
+      "recordDate": "2026-07-16",
+      "exDate": "2026-07-17",
+      "payDate": "2026-07-17",
+      "cashPerShare": "0.79",
+      "taxTreatment": "announcement initially pays gross; deferred differentiated tax on sale is not reconstructed",
+      "sourceIds": [
+        "600900-202607-dividend-cninfo"
+      ]
+    },
+    {
+      "id": "601088-202508-halt",
+      "symbol": "601088.SH",
+      "type": "suspension",
+      "status": "verified",
+      "announcementDate": "2025-08-02",
+      "availableFrom": "2025-08-04T09:30:00+08:00",
+      "startDate": "2025-08-04",
+      "endDate": "2025-08-15",
+      "resumeDate": "2025-08-18",
+      "resumeKnownFrom": "2025-08-18T09:30:00+08:00",
+      "sourceIds": [
+        "601088-suspend",
+        "601088-resume"
+      ]
+    },
+    {
+      "id": "600900-202507-dividend",
+      "symbol": "600900.SH",
+      "type": "cash-dividend",
+      "status": "verified",
+      "announcementDate": "2025-07-11",
+      "availableFrom": "2025-07-14T09:30:00+08:00",
+      "recordDate": "2025-07-17",
+      "exDate": "2025-07-18",
+      "payDate": "2025-07-18",
+      "cashPerShare": "0.733",
+      "taxTreatment": "gross announced amount; actual deferred differentiated tax not reconstructed",
+      "sourceIds": [
+        "600900-202507-dividend"
+      ]
+    },
+    {
+      "id": "600900-202602-dividend",
+      "symbol": "600900.SH",
+      "type": "cash-dividend",
+      "status": "verified",
+      "announcementDate": "2026-02-05",
+      "availableFrom": "2026-02-06T09:30:00+08:00",
+      "recordDate": "2026-02-11",
+      "exDate": "2026-02-12",
+      "payDate": "2026-02-12",
+      "cashPerShare": "0.21",
+      "taxTreatment": "gross announced amount; actual deferred differentiated tax not reconstructed",
+      "sourceIds": [
+        "600900-202602-dividend"
+      ]
+    }
+  ],
+  "coverage": [
+    {
+      "symbol": "515450.SH",
+      "from": "2024-01-01",
+      "to": "2024-12-31",
+      "status": "reviewed-complete-interval",
+      "types": [
+        "cash-dividend",
+        "share-ratio"
+      ],
+      "eventIds": [
+        "515450-202407",
+        "515450-202412"
+      ],
+      "cashPerShareSum": "0.105",
+      "sourceIds": [
+        "515450-2024-annual",
+        "515450-202407-dividend",
+        "515450-202412-dividend"
+      ],
+      "basis": "Annual distribution table reconciled with each original announcement; section 10 records no share splits. Annual report is ex-post audit evidence, not an earlier trading signal."
+    },
+    {
+      "symbol": "515450.SH",
+      "from": "2025-01-01",
+      "to": "2025-12-31",
+      "status": "reviewed-complete-interval",
+      "types": [
+        "cash-dividend",
+        "share-ratio"
+      ],
+      "eventIds": [
+        "515450-202507",
+        "515450-202512"
+      ],
+      "cashPerShareSum": "0.075",
+      "sourceIds": [
+        "515450-2025-annual",
+        "515450-202507-dividend",
+        "515450-202512-dividend"
+      ],
+      "basis": "Annual distribution table reconciled with each original announcement; section 10 records no share splits. Annual report is ex-post audit evidence, not an earlier trading signal."
+    },
+    {
+      "symbol": "512660.SH",
+      "from": "2025-01-01",
+      "to": "2025-12-31",
+      "status": "reviewed-complete-interval",
+      "types": [
+        "cash-dividend",
+        "share-ratio"
+      ],
+      "eventIds": [],
+      "cashPerShareSum": "0",
+      "sourceIds": [
+        "512660-2025-annual"
+      ],
+      "basis": "Annual report says no profit distributions and no share split during 2025; does not certify 2026 or infer qfq equivalence forever."
+    }
+  ],
+  "quarantineReviews": [
+    {
+      "symbol": "512800.SH",
+      "cause": "2025-07-07价格跳变与官方公告的1拆2吻合，登记日为7月4日。",
+      "status": "cause-verified-remains-isolated",
+      "sourceIds": [
+        "512800-split-plan",
+        "512800-split-result"
+      ],
+      "restoredAt": null,
+      "remaining": "全期限企业行为和现金流仍未完整覆盖；旧价格回测不支持这次拆分，继续隔离排名。"
+    },
+    {
+      "symbol": "512480.SH",
+      "cause": "执行券商公告确认2026年7月2日日终份额折算、下一交易日生效；尚未取得发行人原始比例及结果公告。",
+      "status": "partial-official-evidence-remains-isolated",
+      "urls": [
+        "https://www.cczq.com/home/a/buscenter/sfc/sfcnotice/20260701/27080.html"
+      ],
+      "restoredAt": null,
+      "remaining": "不能仅凭约一半的价格或二手表格认定1拆2；继续隔离。"
+    },
+    {
+      "symbol": "512660.SH",
+      "cause": "请求前复权接口却仅返回day字段，存档中与原始价数组相同。官方年报仅证实2025年无分配和份额拆分。",
+      "status": "field-basis-issue-remains-isolated",
+      "sourceIds": [
+        "512660-2025-annual"
+      ],
+      "restoredAt": null,
+      "remaining": "可单独研究未复权2025年；不能把当前全期限行情重新标记为已核验前复权，继续隔离排名。"
+    },
+    {
+      "symbol": "601088.SH",
+      "cause": "2025年8月4日至15日恰好缺失10个交易日，与正式停牌公告吻合，8月18日复牌。",
+      "status": "cause-verified-remains-isolated",
+      "sourceIds": [
+        "601088-suspend",
+        "601088-resume"
+      ],
+      "restoredAt": null,
+      "remaining": "仅支持独立的非成交滞后估值视图；不补造可交易日线，未解除当前排名隔离。"
+    }
+  ],
+  "limits": [
+    "Only explicitly reviewed intervals can enable complete cash-flow modes. Event evidence is not proof of account ownership or payment.",
+    "Official announced payment dates are modeled conservatively; no broker receipt or exact dividend-tax history is asserted."
+  ]
+}

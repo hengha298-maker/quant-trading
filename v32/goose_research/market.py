@@ -94,7 +94,9 @@ def xshg_sessions(start, end):
     if begin > finish:
         _fail("DATE_RANGE_REVERSED")
     if end > CALENDAR_SUPPORTED_THROUGH:
-        _fail("CALENDAR_RANGE_UNSUPPORTED_AFTER_2026_12_31")
+        from .calendar_review import sessions as reviewed_sessions
+        future=reviewed_sessions(max(start,'2027-01-01'),end)
+        return (xshg_sessions(start,CALENDAR_SUPPORTED_THROUGH) if start<=CALENDAR_SUPPORTED_THROUGH else [])+future
     try:
         import exchange_calendars
     except ImportError:
@@ -111,6 +113,11 @@ def xshg_sessions(start, end):
     if len(sessions) > MAX_SESSIONS:
         _fail("CALENDAR_RANGE_TOO_LARGE")
     return sessions
+
+
+def calendar_supported_through():
+    from .calendar_review import supported_through
+    return supported_through()
 
 
 def etf_anomaly_diagnostics(dataset):
@@ -188,7 +195,9 @@ def validate_dataset(doc):
         _fail("FETCHED_AT_FROM_FUTURE")
     _obj(doc["calendar"], {"name", "sessions", "supportedThrough"}, "CALENDAR")
     calendar = doc["calendar"]
-    if calendar["name"] != "XSHG" or calendar["supportedThrough"] != CALENDAR_SUPPORTED_THROUGH:
+    supported=calendar_supported_through()
+    reviewed_boundaries={f'{y}-12-31' for y in range(2026,int(supported[:4])+1)}
+    if calendar["name"] != "XSHG" or calendar["supportedThrough"] not in reviewed_boundaries:
         _fail("CALENDAR_BASIS_UNSUPPORTED")
     sessions = calendar["sessions"]
     if not isinstance(sessions, list) or not sessions or len(sessions) > MAX_SESSIONS:
@@ -197,7 +206,7 @@ def validate_dataset(doc):
         _date(session, "SESSION")
     if sessions != sorted(set(sessions)):
         _fail("CALENDAR_SESSIONS_DUPLICATE_OR_UNSORTED")
-    if sessions[-1] > CALENDAR_SUPPORTED_THROUGH:
+    if sessions[-1] > calendar['supportedThrough']:
         _fail("CALENDAR_RANGE_UNSUPPORTED_AFTER_2026_12_31")
     if sessions[-1] > fetched.astimezone(BJ).date().isoformat():
         _fail("SESSION_FROM_FUTURE")
@@ -386,5 +395,5 @@ def fetch_history(symbol, start, end, source="eastmoney", *, kind=None):
     unit_verified = symbol == "600900.SH"
     warnings = [] if symbol in INSTRUMENTS else ["INSTRUMENT_KIND_USER_DECLARED_IDENTITY_AND_UNITS_NOT_VERIFIED"]
     evidence = f"{DOC_URL} ; unadjusted decimal price field, raw volume lots converted to shares; no independent cross-source price verification" if unit_verified else "Independent instrument identity/price-unit verification absent; prices retained verbatim without rescaling"
-    doc = {"format": "goose-market-dataset", "version": 1, "symbol": symbol, "kind": declared_kind, "source": source, "sourceUrl": EASTMONEY_URL if source == "eastmoney" else TENCENT_URL, "adjustment": "none", "currency": "CNY", "priceUnit": "CNY-per-share", "fetchedAt": datetime.now(timezone.utc).isoformat(), "calendar": {"name": "XSHG", "sessions": sessions, "supportedThrough": CALENDAR_SUPPORTED_THROUGH}, "bars": selected, "quality": {"status": "validated" if unit_verified else "blocked", "crossValidated": False, "warnings": warnings, "unitVerified": unit_verified, "corporateActionsVerified": False, "unitEvidence": evidence}}
+    doc = {"format": "goose-market-dataset", "version": 1, "symbol": symbol, "kind": declared_kind, "source": source, "sourceUrl": EASTMONEY_URL if source == "eastmoney" else TENCENT_URL, "adjustment": "none", "currency": "CNY", "priceUnit": "CNY-per-share", "fetchedAt": datetime.now(timezone.utc).isoformat(), "calendar": {"name": "XSHG", "sessions": sessions, "supportedThrough": calendar_supported_through()}, "bars": selected, "quality": {"status": "validated" if unit_verified else "blocked", "crossValidated": False, "warnings": warnings, "unitVerified": unit_verified, "corporateActionsVerified": False, "unitEvidence": evidence}}
     return validate_dataset(doc)

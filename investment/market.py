@@ -30,6 +30,7 @@ from goose_intraday.network import (default_opener, error_code, strict_json,
     parse_tencent as parse_stock_tencent, parse_eastmoney as parse_stock_eastmoney)
 from goose_research.market import (BJ, CALENDAR_SUPPORTED_THROUGH, TENCENT_URL,
     EASTMONEY_URL, xshg_sessions, validate_dataset, etf_anomaly_diagnostics)
+from goose_research.market import calendar_supported_through
 
 SPECS = {
     "600900.SH": {"kind": "stock", "tick": "0.01", "names": ("长江电力",)},
@@ -305,7 +306,7 @@ def _dataset(symbol, bars, start, end, observation, quote):
     doc = {"format": "goose-market-dataset", "version": 1, "symbol": symbol, "kind": spec["kind"],
         "source": "tencent", "sourceUrl": TENCENT_URL, "adjustment": "none", "currency": "CNY",
         "priceUnit": "CNY-per-share", "fetchedAt": observation["receivedAt"],
-        "calendar": {"name": "XSHG", "sessions": sessions, "supportedThrough": CALENDAR_SUPPORTED_THROUGH},
+        "calendar": {"name": "XSHG", "sessions": sessions, "supportedThrough": calendar_supported_through()},
         "bars": bars, "quality": {"status": "validated" if unit_ok else "blocked", "crossValidated": False,
             "unitVerified": unit_ok, "unitEvidence": evidence, "corporateActionsVerified": False,
             "warnings": ["PRICE_RETURN_EXCLUDES_CASH_DIVIDENDS_NOT_TOTAL_INVESTMENT_RETURN"]}}
