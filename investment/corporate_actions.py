@@ -4,7 +4,7 @@ Provider-adjusted prices and absence of a large jump never certify coverage.
 Announcement dates use conservative next-session availability when time is absent.
 """
 from datetime import date,datetime,time,timedelta
-from decimal import Decimal as D
+from decimal import Decimal as D,ROUND_HALF_UP
 from pathlib import Path
 from urllib.parse import urlsplit
 import hashlib,json,re
@@ -57,6 +57,10 @@ def validate(doc,*,synthetic=False):
         ids={e['id'] for e in doc['events'] if e['symbol']==c['symbol'] and e['type']!='suspension' and c['from']<=e['exDate']<=c['to']}
         if set(c['eventIds'])!=ids:raise ValueError('ACTION_COVERAGE_EVENT_RECONCILIATION_FAILED')
         if c.get('cashPerShareSum') is not None and sum((D(e['cashPerShare']) for e in doc['events'] if e['id'] in ids and e['type']=='cash-dividend'),D(0))!=D(c['cashPerShareSum']):raise ValueError('ACTION_ANNUAL_DISTRIBUTION_TOTAL_CONFLICT')
+        if c.get('issuerCashReconciliationCNY'):
+            r=c['issuerCashReconciliationCNY']
+            if any(not isinstance(r.get(k),str) or not re.fullmatch(r'(?:0|[1-9]\d{0,18})(?:\.\d{1,2})?',r[k]) for k in ('openingPayable','declared','closingPayable','paid','shares')):raise ValueError('ACTION_ISSUER_CASH_RECONCILIATION_INVALID')
+            if D(r['openingPayable'])+D(r['declared'])-D(r['closingPayable'])!=D(r['paid']) or (D(c['cashPerShareSum'])*D(r['shares'])).quantize(D('.01'),rounding=ROUND_HALF_UP)!=D(r['paid']):raise ValueError('ACTION_ISSUER_CASH_RECONCILIATION_CONFLICT')
     return doc
 
 def catalog():

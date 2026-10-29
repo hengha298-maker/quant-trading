@@ -26,6 +26,12 @@ def fixture(kind='cash-dividend',ratio='2'):
     return rows,event,raw,doc,bench
 
 class CorporateActionTests(unittest.TestCase):
+    def test_issuer_payable_rollforward_matches_dated_cash_events(self):
+        rows,e,raw,doc,b=fixture();c=doc['coverage'][0];c['cashPerShareSum']='1'
+        c['issuerCashReconciliationCNY']={'openingPayable':'200','declared':'1000','closingPayable':'200','paid':'1000','shares':'1000'}
+        validate(doc,synthetic=True);c['issuerCashReconciliationCNY']['closingPayable']='201'
+        with self.assertRaisesRegex(ValueError,'RECONCILIATION_CONFLICT'):validate(doc,synthetic=True)
+
     def test_comparison_has_five_rules_fair_dates_and_separate_cash_modes(self):
         rows,e,raw,doc,b=fixture();full=history('515450.SH')['raw'];benchmark=history()['raw']
         doc['coverage'][0]['to']=full['bars'][-1]['date']

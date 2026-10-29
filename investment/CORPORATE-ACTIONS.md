@@ -10,6 +10,8 @@ Cash events distinguish announcement, conservative information availability, rec
 
 Annual distribution tables are reconciled with individual implementation announcements; share-change sections supply negative evidence for a declared interval. Later annual reports audit completeness retrospectively and are never treated as advance trading information. Coverage applies only to explicitly reviewed dates and event types. A few correct events do not imply full-horizon coverage. Provider front-adjusted prices do not certify dividends, tax or corporate actions.
 
+Locally archived evidence currently supports bounded accounts for 515450 in 2024/2025, 600900 in 2025, and a separate raw-only 512660 study in 2025 (the latter remains excluded from current qfq ranking). For 600900, original January/July payment notices reconcile to opening dividends payable plus declared distributions minus closing payable, with unchanged shares in the annual report. A dividend declared in December 2025 but paid in February 2026 is not counted as 2025 cash. These are issuer-level public reconciliations, not private account reconciliation or proof of a shareholder's net tax. No full current 2026 cash-flow horizon is certified.
+
 ## Five distinct meanings
 
 1. Raw historical market prices remain execution/valuation inputs.
