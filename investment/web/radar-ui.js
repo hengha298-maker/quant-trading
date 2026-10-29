@@ -37,6 +37,7 @@ export function renderRadar(report){
  const all=node('details');all.append(node('summary','查看全部观察池与未入选原因'));
  all.append(table(['标的','类型/分数','数据日期/状态','未入选原因'],(r.items||[]).map(i=>[i.name+' '+i.symbol,i.kind+' / '+(i.score?.value??'未评分'),(i.through||'未知')+' / '+(i.quality?.status||'未知'),[...(i.quality?.codes||[]),...(i.rejections||[]),i.quarantineReview?.cause,i.quarantineReview?.remaining].filter(Boolean).join('；')||'通过研究门槛'])));card.append(all);
  if(r.strategyQuality)paragraph(card,'策略质量结论：'+r.strategyQuality.conclusion+'。同类标的收益相关，胜出次数不能当作独立统计证据。','warning');
+ if(r.strategyQuality?.familyComplete===false)paragraph(card,'本次统计因耗时预算或比较集合不完整而未完成，不显示部分显著性；尚未证明优势，不等于证明策略无效。','footnote');
  for(const note of r.limitations||[])paragraph(card,note,'footnote');target.append(card);
 }
 export function renderLabs(report,request){

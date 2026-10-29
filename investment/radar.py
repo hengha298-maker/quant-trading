@@ -104,7 +104,8 @@ def build(root,market,portfolio,*,deadline=None):
         except (ValueError,OSError,KeyError) as exc:
             item['eligible']=False;item['rejections'].append('策略证据或计算未就绪：'+(str(exc) if re.fullmatch(r'[A-Z0-9_]{1,100}',str(exc)) else 'RADAR_COMPUTATION_INVALID'))
         items.append(item)
-    quality_result=assess(quality_inputs) if deadline is None or (deadline-datetime.now(timezone.utc)).total_seconds()>3 else {'status':'not-demonstrated','conclusion':'尚未证明优于买入持有','comparisons':[],'reason':'REPORT_TIME_RESERVED'}
+    expected_family=sum(4-(s['symbol']==cat['benchmark']) for s in cat['instruments'] if histories.get(s['symbol']) is not None)
+    quality_result=assess(quality_inputs,deadline=deadline-timedelta(seconds=1) if deadline else None,expected_family_size=expected_family) if deadline is None or (deadline-datetime.now(timezone.utc)).total_seconds()>3 else {'status':'not-demonstrated','conclusion':'尚未证明优于买入持有','comparisons':[],'reason':'REPORT_TIME_RESERVED','familyComplete':False}
     for item in items:item['strategyQuality']=[r for r in quality_result['comparisons'] if r['symbol']==item['symbol']]
     groups={};coverage={}
     for kind,minimum in [('etf',5),('stock',4)]:
