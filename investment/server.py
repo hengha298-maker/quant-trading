@@ -434,7 +434,17 @@ def make_server(root, port=9395, host='127.0.0.1', analyze=None, *, allowed_host
             else:
                 self._json(404, {'error': 'NOT_FOUND'})
 
-    server = ThreadingHTTPServer((host, port), Handler)
+    # Windows SO_REUSEADDR can allow two dashboards to listen on one port,
+    # routing requests to different loaded versions. Fail before activation.
+    import socket,os
+    server = ThreadingHTTPServer((host, port), Handler, bind_and_activate=False)
+    if os.name=='nt':
+        server.allow_reuse_address=False
+        server.socket.setsockopt(socket.SOL_SOCKET,socket.SO_EXCLUSIVEADDRUSE,1)
+    try:
+        server.server_bind();server.server_activate()
+    except BaseException:
+        server.server_close();raise
     server.daemon_threads = True
     actual_port = server.server_address[1]
     hosts.update({f'127.0.0.1:{actual_port}', f'localhost:{actual_port}'})

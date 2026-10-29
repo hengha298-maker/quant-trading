@@ -14,6 +14,9 @@ from investment.server import make_server, MAX_BODY
 
 
 class PrivateServerTests(unittest.TestCase):
+    def test_second_dashboard_cannot_bind_existing_private_port(self):
+        with self.assertRaises(OSError):make_server(self.root,port=self.port)
+
     def test_radar_download_authenticated_contained_and_hash_checked(self):
         import hashlib
         from investment.holdings import _canonical
