@@ -22,9 +22,33 @@
 <div id="import-status" role="status"></div><div id="preview"></div><button id="confirm" class="primary" hidden>已逐项核对，保存这份真实持仓</button>
 <h3>各券商已确认的最新持仓</h3><div id="current-holdings"></div>
 <article class="card"><h3>成交与资金流水增量导入</h3><p>仍使用上方所选券商。只导入你核对的成交/交割数据，先预览、再保存；不会提交证券委托，也不会改写原持仓快照。</p>
-<form id="trade-form"><div class="shared-fields"><label>导出开始日期<input id="trade-start" type="date" required></label><label>导出截止日期<input id="trade-end" type="date" required></label></div><label>CSV / XLSX 成交或交割文件<input id="trade-file" type="file" accept=".csv,.xlsx" required></label><label><input id="trade-complete" type="checkbox">我已核对：文件覆盖所填日期内全部成交与资金流水</label><p class="footnote">同日成交号用于去重，委托号不能替代成交号。支持买入、卖出、红利、税费及资金转入/转出。总费用和资金发生额未知时留空，不能填零代替未知。</p><button type="submit">预览增量记录</button></form><div id="trade-preview"></div><button id="trade-confirm" class="primary" hidden>已核对，保存新事件</button><p id="trade-message" role="status"></p>
+<form id="trade-form"><label>文件范围<select id="trade-role"><option value="combined">完整交割：成交与资金已统一</option><option value="executions">仅成交明细（资金另核）</option><option value="cash">仅资金流水（买卖需关联成交号）</option></select></label><label>原文件资金符号<select id="trade-sign"><option value="signed">收入正、支出负</option><option value="outflow-positive">收入负、支出正（明确反向）</option></select></label><div class="shared-fields"><label>导出开始日期<input id="trade-start" type="date" required></label><label>导出截止日期<input id="trade-end" type="date" required></label></div><label>CSV / XLSX 成交或交割文件<input id="trade-file" type="file" accept=".csv,.xlsx" required></label><label><input id="trade-complete" type="checkbox">我已核对：文件覆盖所填日期内全部成交与资金流水</label><p class="footnote">同日成交号用于去重，委托号不能替代成交号。支持买入、卖出、红利、税费及资金转入/转出。总费用和资金发生额未知时留空，不能填零代替未知。</p><button type="submit">预览增量记录</button></form><div id="trade-preview"></div><button id="trade-confirm" class="primary" hidden>已核对，保存新事件</button><p id="trade-message" role="status"></p>
 <details><summary>导出字段模板</summary><pre>成交编号,成交日期,操作,证券代码,成交数量,成交价格,成交金额,总费用,资金发生额,已实现盈亏</pre><p>业务类型：买入、卖出、分红、红利税、手续费、银证转入、银证转出。字段含义不明会停止导入，不猜测券商私有格式。不要上传身份号码、密码或验证码。</p></details></article>
 <div id="ledger-state"></div>
+<details class="card"><summary>补充期初／期末对账证据</summary>
+<p>选择上方券商，分别导入两端日末持仓与账面现金。仅追加对账证据，不覆盖已有真实持仓。可用资金不能替代资金余额。</p>
+<form id="statement-form">
+<label>快照日末日期<input id="statement-date" type="date" required></label>
+<label>CSV / XLSX 对账快照<input id="statement-file" type="file" accept=".csv,.xlsx" required></label>
+<label>成本口径<select id="statement-cost-basis"><option value="unknown">尚未核实（不据此计算卖出成本）</option><option value="moving-average-acquisition-including-buy-fees">已核实：移动加权购入成本金额，含买入费</option></select></label>
+<label><input id="statement-complete" type="checkbox">已核对：普通现金证券账户全部持仓与账面总现金，非筛选导出，不含融资／衍生品账户</label>
+<button type="submit">预览对账快照</button></form><div id="ledger-tools-status" role="status"></div><button id="statement-confirm" hidden>已核对，追加对账证据</button>
+<pre>证券代码,持仓数量,可卖数量,持仓成本金额,证券市值,账面现金,可用资金,冻结资金,应收红利</pre>
+<p class="footnote">这些是标准字段含义，不要求伪造或补填原文件未知值。摊薄成本价不等于含费购入成本金额；字段不明时停止并补映射。</p></details>
+<details class="card"><summary>完整加密备份与恢复</summary>
+<p>包括 Windows 全部持仓快照、成交／资金／分红批次、撤销、对账快照及版本／字段映射；同时包括此浏览器、此地址的旧账本。密码只在浏览器使用，不发送电脑。密钥、任务和原始券商文件不在包内。</p>
+<p class="warning">不同设备或端口的旧离线App数据无法自动读取：如需合在同一包，请在下方选择它导出的旧加密备份。浏览器存储不是永久备份。</p>
+<label>可选：附加旧手机加密备份<input id="legacy-backup-file" type="file" accept=".json,.goose"></label>
+<label>可选旧备份的密码<input id="legacy-backup-password" type="password" autocomplete="off"></label>
+<label>新完整包密码（至少12字符）<input id="full-password" type="password" minlength="12" autocomplete="new-password"></label>
+<label>再次输入新密码<input id="full-password-repeat" type="password" autocomplete="new-password"></label>
+<button id="full-export" type="button">导出完整加密包</button><p id="full-backup-status" role="status"></p>
+<hr><label>选择完整包或旧版手机备份<input id="full-restore-file" type="file" accept=".json,.goose"></label>
+<label>备份密码<input id="full-restore-password" type="password" autocomplete="off"></label>
+<button id="full-restore-preview" type="button">解密、校验并预览</button><p id="full-restore-status" role="status"></p>
+<button id="full-restore-confirm" type="button" disabled>确认合并无冲突记录</button>
+<p class="footnote">恢复只合并，不覆盖；冲突或预览后数据变化会阻断。Windows先原子提交，浏览器独立事务保存；如浏览器保存失败会明确提示，可重试而不重复导入。旧版手机备份不会删除或替换Windows新账本。</p>
+</details>
 <details><summary>CSV 字段示例（不含虚构持仓）</summary><pre>证券代码,证券名称,持仓数量,成本价,市值,浮动盈亏,可用资金</pre><p class="footnote">缺失金额留空，日期在上方填写；请优先使用券商原始结构化导出。无法识别的字段会明确报错。</p></details>
 </section>
 <section id="research" class="page" hidden><h2>量化研究与风险</h2><p class="muted">独立研究插件与已有回测分开，未经验证的策略不会冒充实盘结论。</p><div id="research-report"></div></section>

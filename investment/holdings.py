@@ -473,6 +473,12 @@ def _validate_preview(preview: dict, *, check_expiry: bool = True):
 
 
 def commit_preview(preview: dict, root: str | Path, confirmed: bool) -> dict:
+    from .private_store import store_lock
+    with store_lock(Path(root).parent):
+        return _commit_preview(preview, root, confirmed)
+
+
+def _commit_preview(preview: dict, root: str | Path, confirmed: bool) -> dict:
     """After explicit human confirmation create one new immutable local snapshot.
 
     ``root`` is the exact private snapshot directory, not a repository root.
@@ -494,7 +500,8 @@ def commit_preview(preview: dict, root: str | Path, confirmed: bool) -> dict:
         _fail("IMPORT_BUSY", "另一持仓导入正在保存；如上次异常退出，请先人工检查锁文件。")
     try:
         os.close(fd)
-        for existing in directory.iterdir():
+        from .private_store import record_paths
+        for existing in record_paths(directory):
             if existing.suffix != ".json":
                 continue
             _safe_path(existing, file=True)
@@ -539,9 +546,8 @@ def _read_snapshot(path):
 def load_latest(root: str | Path) -> dict | None:
     """Compatibility: read the latest globally confirmed snapshot."""
     directory = _safe_path(root, missing=True)
-    if not directory.exists():
-        return None
-    files = sorted((p for p in directory.iterdir() if p.suffix == ".json"), key=lambda p: p.name)
+    from .private_store import record_paths
+    files = record_paths(directory)
     return _read_snapshot(files[-1]) if files else None
 
 
@@ -552,10 +558,9 @@ def load_latest_by_broker(root: str | Path) -> list[dict]:
     old dates remain old dates and quantities are never silently aggregated.
     """
     directory = _safe_path(root, missing=True)
-    if not directory.exists():
-        return []
+    from .private_store import record_paths
     latest = {}
-    files = sorted((p for p in directory.iterdir() if p.suffix == ".json"), key=lambda p: p.name)
+    files = record_paths(directory)
     for path in files:
         snapshot = _read_snapshot(path)
         broker = snapshot["source"]["broker"]

@@ -76,7 +76,7 @@ class PrivateServerTests(unittest.TestCase):
 
     def test_all_private_read_endpoints_require_bearer(self):
         self.report()
-        for path in ['session', 'status', 'latest', 'holdings', 'history', 'report-json', 'report-v31','ledger','broker-access','automation']:
+        for path in ['session', 'status', 'latest', 'holdings', 'history', 'report-json', 'report-v31','ledger','broker-access','automation','ledger-backup']:
             with self.subTest(path=path):
                 status, headers, value = self.request('GET', '/investment/api/' + path, authenticated=False)
                 self.assertEqual(status, 401)
@@ -213,6 +213,23 @@ class PrivateServerTests(unittest.TestCase):
         self.assertEqual(self.request('GET', '/investment/api/latest')[0], 401)
         self.token = self.server.access_key
         self.assertEqual(self.request('GET', '/investment/api/latest')[0], 200)
+
+    def test_statement_preview_confirmation_and_backup_restore_preview(self):
+        csv='证券代码,持仓数量,可卖数量,持仓成本金额,证券市值,账面现金\n600900,100,100,1000,1000,1000\n'
+        body={'fileName':'fictional.csv','content':base64.b64encode(csv.encode()).decode(),'broker':'华宝证券','asOf':'2026-10-26','costBasis':'moving-average-acquisition-including-buy-fees'}
+        status,_,p=self.request('POST','/investment/api/statement-preview',body);self.assertEqual(200,status)
+        self.assertEqual(200,self.request('POST','/investment/api/confirm',{'previewId':p['previewId'],'confirmed':True})[0])
+        status,_,bundle=self.request('GET','/investment/api/ledger-backup');self.assertEqual(200,status);self.assertEqual(1,len(bundle['files']))
+        status,_,preview=self.request('POST','/investment/api/ledger-restore-preview',{'ledger':bundle});self.assertEqual(200,status);self.assertEqual(0,preview['newFileCount']);self.assertEqual(1,preview['identicalCount'])
+        self.assertEqual(409,self.request('POST','/investment/api/ledger-restore-confirm',{'previewId':preview['previewId']})[0])
+        self.assertEqual('already-present',self.request('POST','/investment/api/ledger-restore-confirm',{'previewId':preview['previewId'],'confirmed':True})[2]['status'])
+        bundle['files'][0]['name']='../escape.json'
+        self.assertEqual(400,self.request('POST','/investment/api/ledger-restore-preview',{'ledger':bundle})[0])
+
+    def test_new_restore_mutations_still_require_origin_csrf_and_auth(self):
+        for route in ['statement-preview','ledger-restore-preview','ledger-restore-confirm']:
+            self.assertEqual(401,self.request('POST','/investment/api/'+route,{},authenticated=False)[0])
+            self.assertEqual(403,self.request('POST','/investment/api/'+route,{},headers={'X-Goose-CSRF':'wrong'})[0])
 
 
 if __name__ == '__main__':

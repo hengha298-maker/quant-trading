@@ -111,6 +111,32 @@ async function main(){
     await page.locator('#ledger-state button').click();await page.waitForFunction(()=>document.querySelectorAll('#ledger-state button').length===0);
     const accountLayout=await page.evaluate(()=>({viewport:innerWidth,width:document.documentElement.scrollWidth}));assert.ok(accountLayout.width<=accountLayout.viewport+1,'holdings page overflow');
     assert.ok((await page.locator('#automation-status').innerText()).includes('已启用'));
+    if(round===0){
+     await page.locator('summary').filter({hasText:'补充期初／期末对账证据'}).click();
+     await page.locator('#statement-date').fill('2026-10-26');await page.locator('#statement-cost-basis').selectOption('moving-average-acquisition-including-buy-fees');await page.locator('#statement-complete').check();
+     const statementCSV='证券代码,持仓数量,持仓成本金额,证券市值,账面现金\n600900,100,1000,1000,1000\n';
+     await page.locator('#statement-file').setInputFiles({name:'fictional-statement.csv',mimeType:'text/csv',buffer:Buffer.from(statementCSV)});
+     await page.locator('#statement-form button[type=submit]').click();await page.locator('#statement-confirm').waitFor({state:'visible'});
+     assert.ok((await page.locator('#ledger-tools-status').innerText()).includes('1000'));
+     await page.locator('#statement-confirm').click();await page.waitForFunction(()=>document.querySelector('#ledger-tools-status').textContent.includes('已追加对账证据'));
+    }
+    await page.locator('summary').filter({hasText:'完整加密备份与恢复'}).click();
+    const fictionalPhone=await page.evaluate(async()=>{
+     const io=await import('/v3/web/io.js'),domain=await import('/v3/web/domain.js');await io.loadState();
+     const state=domain.saveAccount(domain.emptyState(),{name:'FICTIONAL-BROWSER-BACKUP-BANK',type:'bank',openingBalance:'10000',openingDate:'2026-01-01'});await io.persistState(state);return state;
+    });
+    await page.locator('#full-password').fill('fictional-browser-complete-password');await page.locator('#full-password-repeat').fill('fictional-browser-complete-password');
+    const download=page.waitForEvent('download');await page.locator('#full-export').click();const encrypted=fs.readFileSync(await (await download).path(),'utf8');
+    assert.ok(!encrypted.includes('FICTIONAL-BROWSER-BACKUP-BANK'));assert.ok(!encrypted.includes('broker-events'));
+    const decrypted=await page.evaluate(async text=>(await import('/investment/backup.js')).decryptFullBackup(text,'fictional-browser-complete-password'),encrypted);
+    assert.deepEqual(decrypted.phoneState,fictionalPhone);assert.ok(decrypted.ledger.files.length>=2);
+    await page.evaluate(async()=>{const io=await import('/v3/web/io.js');await io.persistState((await import('/v3/web/domain.js')).emptyState());});
+    await page.locator('#full-restore-file').setInputFiles({name:'fictional-complete.json',mimeType:'application/json',buffer:Buffer.from(encrypted)});
+    await page.locator('#full-restore-password').fill('fictional-browser-complete-password');await page.locator('#full-restore-preview').click();
+    await page.waitForFunction(()=>document.querySelector('#full-restore-confirm').disabled===false);
+    assert.ok((await page.locator('#full-restore-status').innerText()).includes('冲突0项'));
+    page.once('dialog',dialog=>dialog.accept());await page.locator('#full-restore-confirm').click();await page.waitForFunction(()=>document.querySelector('#full-restore-status').textContent.includes('恢复合并完成'));
+    const restoredPhone=await page.evaluate(async()=>(await import('/v3/web/io.js')).loadState());assert.deepEqual(restoredPhone,fictionalPhone);
     await page.locator('[data-page="overview"]').click();
     const presentation=await context.request.get(base+'/investment/presentation.js');assert.equal(presentation.status(),200);
     if(round===0){
@@ -120,7 +146,7 @@ async function main(){
    }finally{await context.close();}
   }
   assert.deepEqual(errors,[],'JavaScript orconsoleerrors');assert.deepEqual(external,[],'unexpectedexternalrequests');assert.deepEqual(failed,[],'HTTPerrors');
-  console.log(JSON.stringify({passed:true,fictionalDataOnly:true,headless:true,viewport:390,freshContexts:2,externalRequests:0,javascriptErrors:0,checks:['rendering','asset-200','unique-symbol-label','two-decimal-percent','broker-vs-computed-pnl','scenario-toggle','bookmark-fragment','no-horizontal-overflow','four-pages','ma60-chart','trade-preview-confirm-undo','real-task-state-rendering']},null,2));
+  console.log(JSON.stringify({passed:true,fictionalDataOnly:true,headless:true,viewport:390,freshContexts:2,externalRequests:0,javascriptErrors:0,checks:['rendering','asset-200','unique-symbol-label','two-decimal-percent','broker-vs-computed-pnl','scenario-toggle','bookmark-fragment','no-horizontal-overflow','four-pages','ma60-chart','trade-preview-confirm-undo','real-task-state-rendering','complete-encrypted-download','restore-preview-confirm','phone-and-server-ledger-scope']},null,2));
  }finally{
   if(browser)await browser.close();
   if(server&&!closed){server.stdin.write('stop\n');server.stdin.end();await Promise.race([new Promise(resolve=>server.once('exit',resolve)),new Promise(resolve=>setTimeout(resolve,5000))]);if(!closed)server.kill();}

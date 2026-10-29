@@ -50,8 +50,9 @@ def account_evidence_digest(root):
  import hashlib
  from .holdings import load_latest_by_broker
  from .ledger import load_batches
+ from .statements import load as load_statements
  accounts=load_latest_by_broker(work(root)/'private/holdings');batches=load_batches(root)
- evidence={'snapshots':[(a.get('snapshotId'),a.get('sourceSha256')) for a in accounts],'activeBatches':sorted((b['batchId'],b['sha256']) for b in batches)}
+ evidence={'snapshots':[(a.get('snapshotId'),a.get('sourceSha256')) for a in accounts],'activeBatches':sorted((b['batchId'],b['sha256']) for b in batches),'statements':sorted((s['statementId'],s['sha256']) for s in load_statements(root))}
  return hashlib.sha256(json.dumps(evidence,sort_keys=True,separators=(',',':')).encode()).hexdigest()
 
 def build_analysis(market,holdings,*,now=None):

@@ -13,7 +13,7 @@ import threading
 import time
 from urllib.parse import urlsplit
 
-MAX_BODY = 8 * 1024 * 1024
+MAX_BODY = 20 * 1024 * 1024
 MAX_UPLOAD = 5 * 1024 * 1024
 MAX_REPORT = 10 * 1024 * 1024
 PREFIX = '/investment/api/'
@@ -213,6 +213,11 @@ def make_server(root, port=9395, host='127.0.0.1', analyze=None, *, allowed_host
                     from .holdings import load_latest_by_broker
                     self._json(200, account_views(repo,load_latest_by_broker(repo/'investment/work/private/holdings')))
                 except (ValueError,OSError):self._json(409,{'error':'LEDGER_INVALID_NO_SILENT_RECOVERY','message':'成交账本校验失败，已停止推演；原持仓未更改。'})
+            elif route == PREFIX + 'ledger-backup':
+                try:
+                    from .ledger_backup import export_state
+                    self._json(200,export_state(repo))
+                except (ValueError,OSError):self._json(409,{'error':'BACKUP_VALIDATION_FAILED','message':'账本验证未通过，未生成不完整备份；现有记录未修改。'})
             elif route == PREFIX + 'broker-access':
                 from .broker_access import status
                 self._json(200,status())
@@ -241,8 +246,10 @@ def make_server(root, port=9395, host='127.0.0.1', analyze=None, *, allowed_host
                 # and backup format. The new dashboard has no service worker.
                 if route in {'/investment', '/investment/'}:
                     path, base = WEB / 'index.html', WEB
-                elif route in {'/investment/app.js', '/investment/styles.css', '/investment/presentation.js'}:
+                elif route in {'/investment/app.js', '/investment/styles.css', '/investment/presentation.js','/investment/backup.js','/investment/ledger-ui.js'}:
                     path, base = WEB / route.rsplit('/', 1)[-1], WEB
+                elif route in {'/v3/web/io.js','/v3/web/domain.js','/v3/web/planning.js'}:
+                    base=WEB.parent.parent/'v3/web';path=base/route.rsplit('/',1)[-1]
                 else:
                     relative = 'index.html' if route == '/' else route.lstrip('/')
                     allowed = {'index.html', 'app.js', 'domain.js', 'investment-ui.js', 'io.js', 'planning.js', 'styles.css', 'sw.js', 'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png'}
@@ -308,9 +315,30 @@ def make_server(root, port=9395, host='127.0.0.1', analyze=None, *, allowed_host
                     from .ledger import parse_events,classified
                     suffix=Path(str(body.get('fileName',''))).suffix.lower()
                     raw=base64.b64decode(body.get('content',''),validate=True)
-                    preview=parse_events(raw,suffix,broker=body.get('broker'),coverage_start=body.get('coverageStart'),coverage_end=body.get('coverageEnd'),complete=body.get('completeCoverage') is True)
+                    preview=parse_events(raw,suffix,broker=body.get('broker'),coverage_start=body.get('coverageStart'),coverage_end=body.get('coverageEnd'),complete=body.get('completeCoverage') is True,source_role=body.get('sourceRole','combined'),cash_sign=body.get('cashSignConvention','signed'))
                     self._preview_response(preview,{'eventCheck':classified(preview,repo)})
                 except (ValueError,TypeError,OSError,binascii.Error) as exc:self._import_error(exc,default='EVENT_IMPORT_INVALID')
+            elif route == PREFIX + 'statement-preview':
+                try:
+                    from .statements import parse_statement
+                    preview=parse_statement(base64.b64decode(body.get('content',''),validate=True),Path(str(body.get('fileName',''))).suffix.lower(),broker=body.get('broker'),as_of=body.get('asOf'),cost_basis=body.get('costBasis','unknown'),complete_account=body.get('completeAccount') is True)
+                    self._preview_response(preview)
+                except (ValueError,TypeError,OSError,binascii.Error) as exc:self._import_error(exc,default='STATEMENT_INVALID')
+            elif route == PREFIX + 'ledger-restore-preview':
+                try:
+                    from .ledger_backup import preview_restore
+                    preview=preview_restore(repo,body.get('ledger'))
+                    self._preview_response(preview,{k:preview[k] for k in ['newFileCount','identicalCount','conflicts','sourceCreatedAt','scope','policy']})
+                except (ValueError,TypeError,OSError,KeyError) as exc:self._import_error(exc,default='RESTORE_PREVIEW_FAILED')
+            elif route == PREFIX + 'ledger-restore-confirm':
+                try:
+                    with state_lock:pending=previews.get(body.get('previewId'))
+                    if not pending or time.monotonic()-pending[0]>900 or pending[1].get('format')!='goose-ledger-restore-preview':raise ValueError('RESTORE_PREVIEW_EXPIRED')
+                    from .ledger_backup import restore
+                    result=restore(repo,pending[1],confirmed=body.get('confirmed'))
+                    with state_lock:previews.pop(body['previewId'],None)
+                    self._json(200,result)
+                except (ValueError,TypeError,OSError,KeyError) as exc:self._import_error(exc,status=409,default='RESTORE_FAILED_UNCHANGED')
             elif route == PREFIX + 'trade-undo':
                 try:
                     from .ledger import undo
@@ -379,12 +407,15 @@ def make_server(root, port=9395, host='127.0.0.1', analyze=None, *, allowed_host
                     if pending[1].get('format')=='goose-broker-event-preview':
                         from .ledger import confirm
                         result=confirm(pending[1],repo,confirmed=True)
+                    elif pending[1].get('format')=='goose-ledger-statement':
+                        from .statements import confirm
+                        result=confirm(pending[1],repo,confirmed=True)
                     else:
                         from .holdings import commit_preview
                         result = commit_preview(pending[1], repo / 'investment' / 'work' / 'private' / 'holdings', confirmed=True)
                     with state_lock:
                         previews.pop(body['previewId'], None)
-                    self._json(200, {key: result[key] for key in ['status', 'sha256', 'snapshotId','batchId','newCount','duplicateCount'] if key in result})
+                    self._json(200, {key: result[key] for key in ['status', 'sha256', 'snapshotId','statementId','batchId','newCount','duplicateCount'] if key in result})
                 except (ValueError, OSError) as exc:
                     self._import_error(exc, status=409, default='IMPORT_FAILED')
             else:

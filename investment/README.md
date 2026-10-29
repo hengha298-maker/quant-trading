@@ -1,37 +1,25 @@
-# 养鹅投资研究：统一入口与生产边界
+# Investment research and reconciled local ledgers
 
-本机唯一入口：`D:\LifeOS\Wealth\Goose\Investment-dev\Start-Investment.cmd`。所有增量功能在同一应用中，未新建App或额外计划任务。原V1.1模拟任务已按用户授权退休，不应重建。
+Use the existing Start-Investment.cmd entry. This change adds no application or scheduled job. Deployment paths, notification credentials and user-specific operating instructions belong in local audit records, never in public source.
 
-## 当前可用
+## Available features
 
-- 华宝、银河分账户持仓确认；CSV/XLSX或对照App手工录入，先预览再保存不可覆盖快照。日期、来源、成本与费用口径明确，未知不填零。
-- 新增成交/交割CSV/XLSX增量导入：按券商、日期、逐笔成交号去重；同号异值阻断。费用总额和分项分开，不重复计费；缺分项不能补零。支持红利、税费及银证资金流。
-- 成交推演与券商持仓分开；完整覆盖声明才允许给出推演数量，仍须对账。部分流水、负持仓或日期级基准不明确时不推算当前数量。成本、可用资金、冻结和可卖数量不按报价猜测；原始持仓文件不改写。
-- 新持仓预览同时显示数量对账差额。误导入可撤销其作用，原批次和撤销标记均保留；撤销不是虚构一笔反向真实交易。
-- 原V1前收盘/MA20、MA20交叉、买入持有、定投价格回测继续保留；新增MA20/60、均线斜率、前20日突破、60日波动/回撤/价格序列夏普、同日期持仓价格相关性。研究插件未独立回测时明确标注，不能借旧回测宣称验证。
-- 原始未复权价格与前复权趋势隔离。分红、税费、再投资现金流尚未对齐，长江电力和ETF完整含息收益保持未验证，不挑选历史最好策略推荐实盘。
-- 手机四页：今日关注、账户与对账、量化研究、历史复盘；研究页有带日期的价格图、插件条件及风险。正常重启复用原私有链接，可明确撤销，不改变旧离线App/IndexedDB/加密备份。
+- Separate broker snapshots with user-reviewed CSV/XLSX or manual import, immutable source hashes and unknown-value preservation.
+- Incremental executions, cash, dividends and fees: preview, explicit confirmation, duplicate/conflict detection, append-only undo and declared coverage intervals.
+- End-of-day statements and evidence-gated quantity, cash, acquisition cost, realized/unrealized profit and dividend reconciliation. Calculations distinguish execution, settlement and actual credit dates. Confirmed execution times order same-day trades; ambiguous order pauses cost calculations.
+- Conditional research plugins, price-history metrics and separately labelled historical backtests. Price returns are not verified dividend-inclusive strategy returns. New research rules do not inherit validation from older strategies.
+- Existing private views display research, accounts, evidence quality and runtime status. No broker order or cancellation interface is exposed. Official account authorization and real export-format acceptance remain external prerequisites.
 
-## 官方账户权限
+## Complete backup and recovery
 
-当前**没有连接券商账户**。本人的查询权限、正式客户端和导出格式仍待券商确认，不能将QMT文档或机构产品存在称为已开通。办理问题与官方来源见根目录[BROKER_ACCESS.md](../BROKER_ACCESS.md)。软件不保存券商密码，不绕过验证码，不自动点击券商客户端。
+The new encrypted package includes immutable Windows accounting records and this browser origin's existing data. An older mobile encrypted backup can be explicitly attached; other devices or origins cannot be read automatically. The legacy mobile backup button alone does not include Windows records.
 
-## 每日运行
+Passwords stay in browser WebCrypto. Authenticated encryption, versioned manifests, checksums, preflight conflict checks and atomic publication protect recovery. Recovery only merges: it never overwrites originals, silently changes an existing effective position baseline or silently voids an active batch. Credentials, delivery claims and scheduling controls are excluded.
 
-既有`Goose-Investment-Pre1445`已启用，当前用户普通权限，交易日14:38启动；14:43:30采集截止、14:44发送截止；不唤醒、不补跑、不重试、每日最多一次投递尝试。Bark配置位于本机Git忽略的`investment/work/private/notifications/bark.local.json`，不再依赖被删V1目录。
+The existing mobile encryption and IndexedDB format remain readable. A browser save failure after Windows publication is reported as partial completion; retry is idempotent rather than falsely presented as a distributed transaction.
 
-页面只读查询Windows任务的真实状态、最近/下次运行和最近流程结果。应用暂停开关只阻断后续自动分析和发送，保留任务及已有记录；恢复不会补发。结果未知必须显示未知，不能据此自动重发。新增账户记录会改变证据指纹，旧报告降级为历史参考；分析途中证据变化将发送固定诊断，而不是旧信号。
+See [ledger and backup formats, formulas, limits and required exports](LEDGER-AND-BACKUP.md). Private accounting data and backups remain Git-ignored. No private deployment metadata or financial examples from real accounts belong in tests or public logs.
 
-电脑需登录、联网、保持唤醒；网页还需控制窗口和Tailscale在线。停止网页窗口不停止独立任务。任务代码不会下证券订单或撤单。2027官方日历尚未核验，当前边界2026-12-31，界面提前提示，未用工作日静默扩展。
+## Validation
 
-## 私有数据和兼容
-
-持仓、成交批次、撤销标记、暂停记录、行情原始响应及报告均在Git忽略的`investment/work`。私有目录使用当前用户/SYSTEM权限保护。网络行情只发送标的代码，真实财富数据无第三方遥测。访问密钥只用于本机和私人手机地址，不进入源码或日志。
-
-新增成交账本是Windows独立数据，**不会自动出现在旧iPhone加密备份里**。在完整Windows备份/恢复预览交付前应保留其私有文件与校验值，不通过手工删除纠错。旧持仓、报告和手机备份格式未迁移或覆盖，兼容报告仍使用goose-investment-report v1。
-
-下一批按账户对账、分红现金流、策略样本外验证、可审阅ETF池推进，具体验收与2027日历维护见[NEXT_STEPS.md](../NEXT_STEPS.md)。没有授权时不增加盘前/盘后调度。
-
-## 验证
-
-`Research32\Scripts\python.exe -B -m unittest discover -s investment/tests -q` 与 `node --test investment/tests/*.test.mjs`。浏览器回归使用独立临时资料和虚构数据，覆盖390px、四页、MA60图表、成交导入/确认/撤销及链接持久性；不冒称本轮iPhone实机验收。真实公开行情与数据保护证据仅保存在正式目录Audit，不上传Git。
+Run `python -B -m unittest discover -s investment/tests -q` and `node --test investment/tests/*.test.mjs v3/tests/*.test.mjs`. The isolated browser regression uses fictional records and temporary profiles. Automated correctness checks, actual broker-file acceptance and live broker authorization are distinct states.

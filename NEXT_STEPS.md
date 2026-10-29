@@ -1,13 +1,10 @@
-# 同一养鹅投资系统的下一批工作
+# Next increments in the existing investment application
 
-本批已在Investment-dev交付成交增量导入/去重/撤销、数量对账、MA20/60研究插件、60日风险/相关性、任务真实状态和应用暂停开关。没有新App或计划任务。
+1. Validate generic field mappings against locally selected official execution, cash, dividend and endpoint-statement exports. Keep identity columns out of normalized data. Reconcile quantities, cash and cost definitions without rewriting broker facts. Synthetic acceptance does not establish real-account reconciliation or interface authorization.
+2. Align corporate actions, ex-dividend dates, distributions, withholding and reinvestment assumptions. Period account reconciliation is not proof of complete dividend-inclusive strategy history. Preserve unknown periods and uncertain tax treatment.
+3. Extend the existing isolated strategy engine with fixed training, validation and out-of-sample intervals. Compare appropriate benchmarks, actual or explicit assumed costs, turnover, drawdown and execution constraints. Do not choose a live strategy solely by the best historical return.
+4. Build a reviewed, versioned security/ETF research pool with verified units, adjustment bases and contemporaneously available history. Missing constituent weights cannot become invented sector exposure.
+5. Maintain the exchange calendar from official publications. Unverified future-year sessions remain blocked; never infer exchange trading days from ordinary weekdays.
+6. Continue using the existing approved automation. Additional scheduling requires separate approval. Preserve original signal timestamps and evaluate subsequent outcomes in separate records, rather than backfilling earlier conclusions.
 
-1. **账户准确性优先**：取得两家券商正式答复与去身份的交割字段样例；先核实可申请的只读权限。无法开通则完善真实表头映射，覆盖完整资金、清算、冻结、逐次分红税与成本口径。验收标准：新导出持仓数量和资金能对平，差异可定位，不静默修正原值。新增成交账本为独立Windows私有数据，不隐含进旧iPhone加密备份；下一批补受保护的全量Windows备份/恢复预览，不能误称现有手机备份已包含它。
-2. **含息收益与策略验证**：先对齐600900及515450真实分配公告、除息日、每股/份金额、税制和现金流；未对齐前保持totalReturnVerified=false。再将MA20/60、突破、低频目标再平衡接到既有独立回测，固定训练/验证/样本外日期与成本、涨跌停/T+1/手数假设；输出完整成交与换手、基准和复算资料，不挑最好参数直接实盘。
-3. **可审阅ETF研究池**：优先经过单位、基金类型、复权及历史连续性审核的少量ETF；同日期动量、波动、回撤、相关性和交易成本比较，冻结股票池版本，保留当时可见数据和失效原因。第一步候选仅作观察，不因池中有排名就产生买入建议；ETF成分权重未取得前不虚构行业穿透。
-4. **交易日历**：本次核查[上交所官方休市公告](https://www.sse.com.cn/disclosure/dealinstruc/closed/list/)仍以2026公告为最新可核实范围。2027正式表未核验，当前继续阻断。官方公告发布后保存来源/日期/SHA、与深交所安排及安装日历逐日比对，测试跨年、调休周末和节前后；审阅通过后再扩展边界，不能直接用工作日猜测。现有手机状态已提前展示这一客观限制。
-5. **每日复盘**：沿用现有14:38主任务，保留当时报价/报告不可变；后续走势另存评价，禁止倒填原判断。盘前及盘后先提供手动阶段代码与耗时验证，增加任何新调度仍须另行批准。未来评估至少展示信号覆盖率、失效率、成本后表现和样本外风险，而非只列收益最好策略。
-
-## 当前新增研究的边界
-
-MA20/60、均线斜率、前20日突破为完整日价格研究，前复权仅独立对照；60日价格波动/回撤、无风险0假设的价格序列夏普不是账户表现，也不是新策略已经回测。现有四策略价格回测继续单独展示；完整含息收益、涨跌停成交可行性、行业穿透、未来自动执行均未声称完成。
+The current complete encrypted package covers Windows normalized accounting records and explicitly selected browser data, with merge-only recovery. Cross-device/origin data requires an attached older backup. Time-weighted returns need valuations at cash-flow boundaries; money-weighted returns need complete dated flows and a validated solution. Neither is silently substituted by a Modified Dietz estimate.

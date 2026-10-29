@@ -1,6 +1,8 @@
-/* Private server view: no analytics, wealth-data storage, IndexedDB or service worker. */
+/* Private server view: no analytics or automatic wealth uploads. IndexedDB is
+   accessed only by explicit complete-backup / recovery actions. No new SW. */
 'use strict';
 import {decimalDisplay, moneyDisplay, percentDisplay, bpsDisplay, instrumentLabel} from './presentation.js';
+import {initLedgerTools,renderAccounting} from './ledger-ui.js';
 const $ = id => document.getElementById(id);
 const api = '/investment/api/';
 let csrf = '', pending = null, ledgerPending=null, polling = null, viewingHistory = false, renderedSignature = '';
@@ -164,6 +166,7 @@ function renderResearch(report){
 async function loadLedger(){
  const box=$('ledger-state');if(!box)return;
  try{const value=await request('ledger');box.replaceChildren(text('h3','分券商核验与成交推演'));
+  if(value.reconciliation)renderAccounting(box,value.reconciliation);
   for(const a of value.accounts){const card=text('article','','card');card.append(text('h3',a.broker),text('p',`券商快照日期 ${a.baselineAsOf}；最后人工核验 ${date(a.lastUserVerifiedAt)}；${a.source}。`,'meta'),text('p',`基准之后已确认事件 ${a.eventCount}；同日未自动计入 ${a.sameDayUnapplied}。`));
    if(a.projectedQuantities)card.append(financialTable(['代码','成交推演数量（待对账）'],Object.entries(a.projectedQuantities).map(([s,q])=>[s,show(q)])));
    card.append(text('p',`流水算术桥（非账户余额） ${amount(a.cashReconciliationBridge)}；导入原报的区间已实现盈亏 ${amount(a.brokerReportedRealizedPnl)}。这两项不是可用资金或系统估算净利润。`,'basis'));const note=risks(a.warnings);if(note)card.append(note);box.append(card);
@@ -177,8 +180,9 @@ $('trade-form').addEventListener('input',clearTrade);$('broker').addEventListene
 $('trade-form').addEventListener('submit',async event=>{event.preventDefault();clearTrade();try{
  const file=$('trade-file').files[0],broker=$('broker').value;if(!broker||!file||file.size>5*1024*1024)throw new Error('请选择券商及不超过5MiB的成交CSV/XLSX。');
  const bytes=new Uint8Array(await file.arrayBuffer());let binary='';for(let i=0;i<bytes.length;i+=32768)binary+=String.fromCharCode(...bytes.subarray(i,i+32768));
- const result=await request('trade-preview',{broker,fileName:file.name,content:btoa(binary),coverageStart:$('trade-start').value,coverageEnd:$('trade-end').value,completeCoverage:$('trade-complete').checked});
+ const result=await request('trade-preview',{broker,fileName:file.name,content:btoa(binary),coverageStart:$('trade-start').value,coverageEnd:$('trade-end').value,completeCoverage:$('trade-complete').checked,sourceRole:$('trade-role').value,cashSignConvention:$('trade-sign').value});
  ledgerPending=result.previewId;const p=result.preview,c=result.eventCheck,box=$('trade-preview');box.append(text('h3',`${p.broker}：新增${c.newEvents.length}条，重复${c.duplicateIds.length}条，冲突${c.conflictIds.length}条`),financialTable(['日期/编号','业务/标的','数量','成交金额','总费用','资金发生额'],p.events.slice(0,30).map(e=>[e.date+' / '+e.id,e.kind+' / '+(e.symbol||'资金'),show(e.quantity),amount(e.gross),amount(e.fees),amount(e.netCash)])));const warn=risks(p.warnings);if(warn)box.append(warn);
  $('trade-confirm').hidden=!!c.conflictIds.length||!c.newEvents.length;$('trade-message').textContent=c.conflictIds.length?'编号冲突，停止保存，未覆盖旧记录。':p.events.length>30?'预览前30条，确认前请完整核对原文件。':'确认前没有写入正式记录。';
  }catch(error){$('trade-message').textContent=error.message;}});
 $('trade-confirm').addEventListener('click',async()=>{if(!ledgerPending)return;try{const result=await request('confirm',{previewId:ledgerPending,confirmed:true});clearTrade();$('trade-message').textContent=`已追加${result.newCount}条，跳过${result.duplicateCount}条已存在事件；原持仓未改写。`;await loadLedger();await request('analyze',{});if(!polling)polling=setInterval(status,1800);await status();}catch(error){$('trade-message').textContent=error.message;}});
+initLedgerTools(request,loadLedger);
