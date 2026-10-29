@@ -146,6 +146,10 @@ def run_daily(root=None, now=None, generate=None, confirmed_send=False, config_p
             event["reportTrusted"] = True
         else:
             report = generate(root, deadline=datetime.combine(clock.date(), ANALYSIS_CUTOFF, BJ))
+            radar=report.get('opportunityRadar',{})
+            event['radarStatus']=radar.get('status') if radar.get('status') in {'ready','partial','unavailable'} else 'unavailable'
+            event['radarETFCount']=min(5,len(radar.get('groups',{}).get('etf',{}).get('candidates',[])))
+            event['radarStockCount']=min(5,len(radar.get('groups',{}).get('stock',{}).get('candidates',[])))
             ended = _clock(now)
             event["completedAt"] = ended.isoformat()
             if ended >= datetime.combine(clock.date(), ANALYSIS_CUTOFF, BJ):

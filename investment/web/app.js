@@ -3,6 +3,7 @@
 'use strict';
 import {decimalDisplay, moneyDisplay, percentDisplay, bpsDisplay, instrumentLabel} from './presentation.js';
 import {initLedgerTools,renderAccounting} from './ledger-ui.js';
+import {renderRadar,renderLabs} from './radar-ui.js';
 const $ = id => document.getElementById(id);
 const api = '/investment/api/';
 let csrf = '', pending = null, ledgerPending=null, polling = null, viewingHistory = false, renderedSignature = '';
@@ -29,6 +30,7 @@ function holdingsTable(value){const box=text('div','');const positions=value.pos
 function financialTable(headers, rows){const scroll=text('div','','table-scroll'),table=document.createElement('table'),head=document.createElement('tr');for(const h of headers)head.append(text('th',h));table.append(head);for(const values of rows){const row=document.createElement('tr');for(const v of values)row.append(text('td',v));table.append(row);}scroll.append(table);return scroll;}
 function renderReport(report){
  renderResearch(report);
+ renderRadar(report);renderLabs(report,request);
  renderedSignature=reportSignature(report);
  const target=$('report');target.replaceChildren();
  if(!report){target.append(empty('尚未生成当前分析','先在“更新持仓”导入并核对真实持仓，然后点击“更新行情与分析”。没有新报告时，不会用旧历史信号填充。'));return;}

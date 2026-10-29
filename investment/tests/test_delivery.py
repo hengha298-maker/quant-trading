@@ -37,6 +37,13 @@ class Response:
 
 
 class DeliveryTests(unittest.TestCase):
+    def test_radar_summary_counts_only_no_private_names_and_failure_no_candidates(self):
+        e=event(radarStatus='partial',radarETFCount=2,radarStockCount=1,radarNames='PRIVATE-NAME')
+        text=_public_body(e,NOW)
+        self.assertIn('ETF观察2项',text);self.assertNotIn('PRIVATE',text)
+        failed=_public_body({**e,'code':'MARKET_INVALID_OR_STALE'},NOW)
+        self.assertNotIn('ETF观察2项',failed);self.assertIn('未沿用旧候选',failed)
+        with self.assertRaises(ValueError):_public_body({**e,'radarETFCount':99},NOW)
     def setup_config(self, root):
         config = Path(root)/"fictional-config.json"
         config.write_text(json.dumps({"server": "https://example.invalid", "device_key": "FictionalUnitTestKey"}), encoding="utf8")

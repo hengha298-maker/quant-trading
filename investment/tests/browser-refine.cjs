@@ -46,6 +46,15 @@ holdings={'asOf':day,'availableCash':'9876.54','missingBrokers':[], 'accounts':[
 report=build_analysis({'quotes':quotes,'histories':histories,'adjustedHistories':adjusted,'diagnostics':[{'fixture':True,'actualDataUsed':False}]},holdings,now=now)
 report['id']='fictional-isolated-browser-regression';report['summary']='完全虚构的界面测试，不是真实持仓或行情。'
 report['portfolio']['concentration']='89.123456789123456789'
+from investment.tests.test_strategy_lab import history,SPEC
+from investment.strategy_lab import run_suite,summarized
+from investment.holdings import _canonical
+import hashlib
+lab=run_suite(history('510050.SH'),history(),SPEC,allow_synthetic=True)
+key=lab['inputHash'];lab_summary=summarized(lab,key)
+candidate={'name':'FICTIONAL ETF 测试','symbol':'510050.SH','kind':'etf','through':day,'quality':{'status':'fictional-ui-only'},'score':{'value':70,'parts':[{'factor':'虚构指标','points':70,'maxPoints':100,'basis':'完全虚构的界面测试'}]},'reasons':['FICTIONAL 仅测试显示'],'trigger':'FICTIONAL 观察条件','invalidation':'FICTIONAL 失效条件','risks':['不是投资研究结果'],'rejections':[],'lab':lab_summary}
+report['testData']=True
+report['opportunityRadar']={'synthetic':False,'through':day,'groups':{'etf':{'candidates':[candidate]},'stock':{'candidates':[],'message':'暂无符合条件的机会'}},'items':[candidate],'limitations':['FICTIONAL TEST ONLY']}
 for instrument in report['instruments']:
  instrument['name']=next(p['name'] for p in holdings['positions'] if p['symbol']==instrument['symbol'])
 work=root/'investment'/'work';work.mkdir(exist_ok=True)
@@ -54,6 +63,8 @@ with tempfile.TemporaryDirectory(prefix='fictional-browser-',dir=work) as temp:
  assert not fake.is_symlink() and not fake.is_junction()
  run=fake/'investment'/'work'/'runs'/'fixture';run.mkdir(parents=True)
  (run/'report.json').write_text(json.dumps(report,ensure_ascii=False),encoding='utf8')
+ labdir=fake/'investment/work/radar/labs';labdir.mkdir(parents=True)
+ (labdir/(key+'.json')).write_bytes(_canonical({'result':lab,'sha256':hashlib.sha256(_canonical(lab)).hexdigest()}))
  (run/'goose-report-v31.json').write_text(json.dumps(compatible_report(report),ensure_ascii=False),encoding='utf8')
  server=make_server(fake,port=int(sys.argv[2]),access_key=sys.argv[3],analyze=lambda _:report)
  thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
@@ -82,6 +93,9 @@ async function main(){
     assert.equal(new URL(page.url()).hash,'#key='+key,'bookmark fragment must survive in both fresh contexts');
     assert.equal(await page.evaluate(()=>sessionStorage.getItem('goose-private-access')),key);
     assert.equal(await page.locator('#report .instrument').count(),2);
+    assert.ok((await page.locator('#opportunity-radar').innerText()).includes('每日投资机会雷达'));
+    assert.ok((await page.locator('#opportunity-radar').innerText()).includes('暂无符合条件的机会'));
+    const candidate=page.locator('#opportunity-radar .scenario').first();await candidate.locator('summary').click();assert.match(await candidate.innerText(),/FICTIONAL 失效条件/);
     const titles=await page.locator('#report .instrument > .report-head h3').allTextContents();
     for(const [i,code] of ['600900','515450'].entries())assert.equal((titles[i].match(new RegExp(code,'g'))||[]).length,1,'stock code duplicated within label');
     const content=await page.locator('#report').innerText();
@@ -96,9 +110,11 @@ async function main(){
     assert.ok(layout.width<=layout.viewport+1&&layout.body<=layout.viewport+1,'390px viewport overflow: '+JSON.stringify(layout));
     assert.equal(await page.locator('nav .tab').count(),4);
     await page.locator('[data-page="research"]').click();
-    assert.equal(await page.locator('#research-report .card').count(),2);
+    assert.equal(await page.locator('#research-report .card').count(),3);
     assert.ok((await page.locator('#research-report').innerText()).includes('MA60'));
-    assert.equal(await page.locator('#research-report svg').count(),2);
+    assert.equal(await page.locator('#research-report svg').count(),3);
+    const lab=page.locator('#research-report .card').first();await lab.locator('details > summary').first().click();assert.match(await lab.innerText(),/固定规则|留出收益/);
+    const labDownload=page.waitForEvent('download');await lab.getByRole('button',{name:'下载完整资金曲线、信号及成交记录'}).click();assert.ok(JSON.parse(fs.readFileSync(await (await labDownload).path(),'utf8')).result.synthetic);
     await page.locator('[data-page="holdings"]').click();
     await page.locator('#broker').selectOption('华宝证券');
     await page.locator('#trade-start').fill('2026-10-27');await page.locator('#trade-end').fill('2026-10-28');
@@ -146,7 +162,7 @@ async function main(){
    }finally{await context.close();}
   }
   assert.deepEqual(errors,[],'JavaScript orconsoleerrors');assert.deepEqual(external,[],'unexpectedexternalrequests');assert.deepEqual(failed,[],'HTTPerrors');
-  console.log(JSON.stringify({passed:true,fictionalDataOnly:true,headless:true,viewport:390,freshContexts:2,externalRequests:0,javascriptErrors:0,checks:['rendering','asset-200','unique-symbol-label','two-decimal-percent','broker-vs-computed-pnl','scenario-toggle','bookmark-fragment','no-horizontal-overflow','four-pages','ma60-chart','trade-preview-confirm-undo','real-task-state-rendering','complete-encrypted-download','restore-preview-confirm','phone-and-server-ledger-scope']},null,2));
+  console.log(JSON.stringify({passed:true,fictionalDataOnly:true,headless:true,viewport:390,freshContexts:2,externalRequests:0,javascriptErrors:0,checks:['rendering','asset-200','unique-symbol-label','two-decimal-percent','broker-vs-computed-pnl','scenario-toggle','bookmark-fragment','no-horizontal-overflow','four-pages','ma60-chart','opportunity-radar','candidate-trigger-invalidation','no-forced-candidates','five-strategy-holdout-table','authenticated-full-curve-download','trade-preview-confirm-undo','real-task-state-rendering','complete-encrypted-download','restore-preview-confirm','phone-and-server-ledger-scope']},null,2));
  }finally{
   if(browser)await browser.close();
   if(server&&!closed){server.stdin.write('stop\n');server.stdin.end();await Promise.race([new Promise(resolve=>server.once('exit',resolve)),new Promise(resolve=>setTimeout(resolve,5000))]);if(!closed)server.kill();}

@@ -123,6 +123,14 @@ def markdown(r):
   if i['backtest']:
    lines+=['','### 同区间价格回测（不是含息总回报）',f"{i['backtest']['from']} 至 {i['backtest']['to']}",'|策略|价格路径收益bps|最大回撤bps|交易次数|费用分|','|---|---:|---:|---:|---:|']
    for x in i['backtest']['comparison']:lines.append(f"|{x['strategy']}|{x['totalReturnBps']}|{x['maxDrawdownBps']}|{x['tradeCount']}|{x['cost']}|")
+ radar=r.get('opportunityRadar')
+ if radar:
+  lines+=['','## 投资机会雷达',f"完整交易日：{radar.get('through') or '未核验'}；状态：{radar['status']}；研究排序不代表未来收益概率。"]
+  for kind,label in [('etf','ETF'),('stock','A股')]:
+   group=radar.get('groups',{}).get(kind,{})
+   lines+=['',f'### {label}',group.get('message','暂无符合条件的机会')]
+   for candidate in group.get('candidates',[]):
+    lines+=[f"- {candidate['name']} {candidate['symbol']}：研究分{candidate['score']['value']}/100；"+'；'.join(candidate['reasons']),f"  关注条件：{candidate['trigger']}",f"  失效条件：{candidate['invalidation']}"]
  lines+=['','## 边界说明',*['- '+w for w in r['warnings']],'','本报告生成步骤不发送Bark、不变更计划任务；实际任务和投递状态请查看运行状态。未连接券商账户。']
  return '\n'.join(lines)+'\n'
 
@@ -146,6 +154,22 @@ def run_analysis(root=None, *, deadline=None):
   report['portfolioRisk']=portfolio_risk(market.get('histories',{}),datetime.now(timezone.utc))
   report['accountMode']='real-snapshots-readonly-no-broker-connection'
   report['accountEvidenceDigest']=start_evidence
+  from .radar import generate as generate_radar,unavailable as radar_unavailable
+  report['opportunityRadar']=radar_unavailable('RADAR_NOT_RUN_NO_VALID_COLLECTION_CONTEXT')
+  if market.get('format')=='goose-investment-market' and not market.get('synthetic'):
+   clock=datetime.now(timezone.utc);budget=90 if deadline is None else 35
+   ages=[]
+   for instrument in report['instruments']:
+    q=instrument.get('quote')
+    if q and q.get('quality',{}).get('status')=='intraday-verified':
+     try:ages.append((clock-datetime.fromisoformat(q['sourceTimestamp'])).total_seconds())
+     except (ValueError,KeyError):ages.append(90)
+   if ages:budget=min(budget,max(0,70-max(ages)))
+   if deadline is not None:budget=min(budget,(deadline-clock).total_seconds()-10)
+   if budget>=8:
+    try:report['opportunityRadar']=generate_radar(root or ROOT,report['portfolio'],now=clock,deadline=clock+timedelta(seconds=budget))
+    except (ValueError,OSError,KeyError):report['opportunityRadar']=radar_unavailable('RADAR_COLLECTION_OR_RESEARCH_FAILED_NO_OLD_CANDIDATES')
+   else:report['opportunityRadar']=radar_unavailable('RADAR_BUDGET_RESERVED_FOR_EXISTING_REPORT')
   if account_evidence_digest(root or ROOT)!=start_evidence:
    report['sourceChanged']=True;report['warnings'].insert(0,'分析期间账户记录发生变化，本报告不作当前账户判断。')
   if deadline is not None and datetime.now(timezone.utc)>=deadline:
@@ -189,6 +213,16 @@ def mark_report_freshness(report, *, now=None, root=None):
   result.setdefault('portfolio',{})['status']='stale-snapshot'
   result['portfolio']['valuationIsCurrent']=False
   for p in result['portfolio'].get('positions',[]):p['currentHoldingConfirmed']=False
+ radar=result.get('opportunityRadar')
+ if radar:
+  from .radar_market import complete_session
+  try:expected=complete_session(clock)
+  except ValueError:expected=None
+  if generated!=day or radar.get('through')!=expected or expected is None or result.get('status')=='account-source-changed':
+   radar['status']='historical';radar['currentCandidatesAllowed']=False
+   for group in radar.get('groups',{}).values():
+    group['candidates']=[];group['message']='原研究日期或账户证据已变化，请更新分析；旧名单仅作历史参考。'
+   for item in radar.get('items',[]):item['eligible']=False
  from .scenarios import build_scenarios
  for item in result.get('instruments',[]):
   if 'scenarioAnalysis' in item:

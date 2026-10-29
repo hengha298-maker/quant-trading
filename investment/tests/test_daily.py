@@ -35,6 +35,13 @@ def report(now, *, status="intraday-verified", holdings="current-user-confirmed"
 
 
 class DailyTests(unittest.TestCase):
+    def test_radar_integrated_without_sending_or_creating_tasks(self):
+        now=clock();r=report(now)
+        r['opportunityRadar']={'status':'partial','groups':{'etf':{'candidates':[{'fixture':True}]*2},'stock':{'candidates':[]}}}
+        with temporary_root() as root,patch('investment.daily.send_daily') as sender:
+            result=run_daily(root,now=now,generate=Mock(return_value=r))
+            self.assertEqual('INTRADAY_VERIFIED',result['code']);self.assertEqual('partial',result['radarStatus'])
+            self.assertEqual(2,result['radarETFCount']);self.assertEqual(0,result['radarStockCount']);sender.assert_not_called()
     def test_planning_and_outside_window_never_call_market_or_claim(self):
         for now, planning in ((clock(21), False), (clock(), True), (clock(14, 44), False)):
             with temporary_root() as root:

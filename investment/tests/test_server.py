@@ -14,6 +14,16 @@ from investment.server import make_server, MAX_BODY
 
 
 class PrivateServerTests(unittest.TestCase):
+    def test_radar_download_authenticated_contained_and_hash_checked(self):
+        import hashlib
+        from investment.holdings import _canonical
+        key='a'*64;folder=self.root/'investment/work/radar/labs';folder.mkdir(parents=True)
+        result={'inputHash':key,'fixture':True};wrapper={'result':result,'sha256':hashlib.sha256(_canonical(result)).hexdigest()}
+        path=folder/(key+'.json');path.write_bytes(_canonical(wrapper));route='/investment/api/radar-lab/'+key
+        self.assertEqual(401,self.request('GET',route,authenticated=False)[0])
+        self.assertEqual(200,self.request('GET',route)[0])
+        self.assertEqual(404,self.request('GET','/investment/api/radar-lab/not-a-hash')[0])
+        path.write_text('{}');self.assertEqual(409,self.request('GET',route)[0])
     def setUp(self):
         scratch = Path(__file__).resolve().parents[1] / 'work' / 'server-tests'
         scratch.mkdir(parents=True, exist_ok=True)

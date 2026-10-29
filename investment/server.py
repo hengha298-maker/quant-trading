@@ -194,6 +194,19 @@ def make_server(root, port=9395, host='127.0.0.1', analyze=None, *, allowed_host
                 self._json(200, {'report': mark_report_freshness(reports[0][2],root=repo) if reports else None})
             elif route == PREFIX + 'history':
                 self._json(200, {'reports': [{'id': item[2]['id'], 'generatedAt': item[2].get('generatedAt'), 'asOf': item[2].get('asOf'), 'status': item[2].get('status'), 'summary': item[2].get('summary')} for item in _reports(repo)[:100]]})
+            elif route.startswith(PREFIX+'radar-lab/'):
+                identifier=route[len(PREFIX+'radar-lab/'):]
+                if not __import__('re').fullmatch(r'[a-f0-9]{64}',identifier):self._json(404,{'error':'LAB_NOT_FOUND'});return
+                base=repo/'investment/work/radar/labs';safe=_contained_file(base/(identifier+'.json'),base)
+                if not safe or safe.stat().st_size>MAX_REPORT:self._json(404,{'error':'LAB_NOT_FOUND'});return
+                raw=safe.read_bytes()
+                try:
+                    from .holdings import _canonical
+                    import hashlib
+                    lab=json.loads(raw)
+                    if lab['sha256']!=hashlib.sha256(_canonical(lab['result'])).hexdigest() or lab['result'].get('inputHash')!=identifier:raise ValueError('LAB_INVALID')
+                except (ValueError,KeyError,TypeError):self._json(409,{'error':'LAB_INTEGRITY_FAILED'});return
+                self._headers(200,raw,download='goose-strategy-lab.json')
             elif route.startswith(PREFIX + 'history/'):
                 identifier = route[len(PREFIX + 'history/'):]
                 if not identifier or len(identifier) > 100 or '/' in identifier:
@@ -246,7 +259,7 @@ def make_server(root, port=9395, host='127.0.0.1', analyze=None, *, allowed_host
                 # and backup format. The new dashboard has no service worker.
                 if route in {'/investment', '/investment/'}:
                     path, base = WEB / 'index.html', WEB
-                elif route in {'/investment/app.js', '/investment/styles.css', '/investment/presentation.js','/investment/backup.js','/investment/ledger-ui.js'}:
+                elif route in {'/investment/app.js', '/investment/styles.css', '/investment/presentation.js','/investment/backup.js','/investment/ledger-ui.js','/investment/radar-ui.js'}:
                     path, base = WEB / route.rsplit('/', 1)[-1], WEB
                 elif route in {'/v3/web/io.js','/v3/web/domain.js','/v3/web/planning.js'}:
                     base=WEB.parent.parent/'v3/web';path=base/route.rsplit('/',1)[-1]

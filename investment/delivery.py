@@ -85,7 +85,12 @@ def _public_body(event, now):
         raise ValueError("EVENT_REJECTED")
     code = event["code"]
     health = "当天盘中报价核验通过" if code == "INTRADAY_VERIFIED" else "本次数据或流程不合格，不沿用旧信号"
-    return f"{day} 养鹅投资研究：{health}；{HOLDINGS[status]}；诊断 {code}。观察，不执行交易。请在养鹅私有入口查看完整报告。"
+    radar=''
+    if 'radarStatus' in event:
+        counts=[event.get('radarETFCount'),event.get('radarStockCount')]
+        if any(type(n) is not int or not 0<=n<=5 for n in counts):raise ValueError('RADAR_COUNTS_INVALID')
+        radar=(f"机会雷达：ETF观察{counts[0]}项、股票观察{counts[1]}项。" if code=='INTRADAY_VERIFIED' and event['radarStatus'] in {'ready','partial'} else '本次雷达未完成或行情不合格，未沿用旧候选。')
+    return f"{day} 养鹅投资研究：{health}；{HOLDINGS[status]}；诊断 {code}。观察，不执行交易。{radar}请在养鹅私有入口查看完整报告。"
 
 
 def send_daily(event, root=None, config_path=None, *, confirmed=False, opener=None, now=None):
