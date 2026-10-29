@@ -1,5 +1,6 @@
 """Read actual task state and maintain an explicit local analysis pause switch."""
 from pathlib import Path
+from datetime import datetime,timedelta
 import json,os,re,subprocess,time,uuid
 from .holdings import _safe_path,_canonical,_now
 _cached=None;_cached_at=0
@@ -30,9 +31,21 @@ def set_paused(root,paused,*,confirmed=False):
  if type(paused) is not bool or confirmed is not True:raise ValueError('EXPLICIT_PAUSE_REQUIRED')
  folder=_safe_path(Path(root)/'investment/work/private/automation-controls',missing=True);folder.mkdir(parents=True,exist_ok=True)
  record={'format':'goose-analysis-control','version':1,'paused':paused,'at':_now().isoformat(),'source':'user-confirmed-private-interface'}
- name=_now().strftime('%Y%m%dT%H%M%S%f')+'-'+uuid.uuid4().hex+'.json'
- with (folder/name).open('xb') as f:f.write(_canonical(record)+b'\n')
- return record
+ # Windows clocks may repeat a timestamp. Atomic exclusive names establish a
+ # total append order, including concurrent writes and a clock moving backward.
+ # Keep old random-suffixed records readable; never rewrite control history.
+ for attempt in range(16):
+  pause_state(root)
+  names=[p.name.split('-')[0] for p in folder.iterdir()]
+  stamp=_now().strftime('%Y%m%dT%H%M%S%f')
+  if names and max(names)>=stamp:
+   try:stamp=(datetime.strptime(max(names),'%Y%m%dT%H%M%S%f')+timedelta(microseconds=1)).strftime('%Y%m%dT%H%M%S%f')
+   except ValueError:raise ValueError('PAUSE_STORE_INVALID') from None
+  try:
+   with (folder/(stamp+'-control.json')).open('xb') as f:f.write(_canonical(record)+b'\n')
+   return record
+  except FileExistsError:continue
+ raise ValueError('PAUSE_CONTROL_WRITE_BUSY')
 
 def automation_status(root,task_reader=None):
  from .daily import latest_daily,schedule_plan
