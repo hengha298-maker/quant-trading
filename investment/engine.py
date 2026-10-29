@@ -102,7 +102,7 @@ def build_analysis(market,holdings,*,now=None):
   instruments.append({'research':extended,'scenarioAnalysis':scenario,'symbol':symbol,'name':NAMES.get(symbol,symbol),'quote':q,'signal':signal,'stance':stance,'basis':basis,'risks':risks,'metrics':m,'backtest':bt,'quality':'low'})
  valid_dates=[x['quote']['sourceTimestamp'][:10] for x in instruments if x['quote']]
  mode='intraday' if any(i['quote'] and i['quote'].get('quality',{}).get('status')=='intraday-verified' for i in instruments) else 'closing-snapshot' if any(i['quote'] and i['quote'].get('quality',{}).get('status')=='closing-snapshot' for i in instruments) else 'historical-or-blocked'
- return {'dataMode':mode,'format':'goose-live-research','version':1,'id':str(uuid.uuid4()),'generatedAt':clock.isoformat(),'asOf':min(valid_dates) if valid_dates else day,'status':'portfolio-research' if pf['status']=='current-user-confirmed' else 'holdings-required','summary':('收盘后研究：观察，不操作。' if mode=='closing-snapshot' else '本次研究：观察，不必操作。')+('已结合用户确认的当日持仓。' if pf['status']=='current-user-confirmed' else '缺少当日确认持仓，不能形成当前账户分析。'),'warnings':list(dict.fromkeys([*pf['warnings'],*LIMITS])),'portfolio':pf,'instruments':instruments,'diagnostics':market.get('diagnostics',[]),'marketContext':market.get('context',{}),'notificationSent':False,'scheduleEnabled':False,'realOrdersEnabled':False}
+ return {'dataMode':mode,'format':'goose-live-research','version':1,'id':str(uuid.uuid4()),'generatedAt':clock.isoformat(),'asOf':min(valid_dates) if valid_dates else day,'status':'portfolio-research' if pf['status']=='current-user-confirmed' else 'holdings-required','summary':('收盘后研究：观察，不操作。' if mode=='closing-snapshot' else '本次研究：观察，不必操作。')+('已结合用户确认的当日持仓。' if pf['status']=='current-user-confirmed' else '缺少当日确认持仓，不能形成当前账户分析。'),'warnings':list(dict.fromkeys([*pf['warnings'],*LIMITS])),'portfolio':pf,'instruments':instruments,'diagnostics':market.get('diagnostics',[]),'marketContext':market.get('context',{}),'notificationSent':False,'scheduleEnabled':None,'scheduleStateSource':'runtime-status-api','realOrdersEnabled':False}
 
 def compatible_report(report):
  return {'format':'goose-investment-report','version':1,'id':report['id'],'source':'养鹅本机整合研究 / 腾讯及东方财富独立请求','asOf':report['asOf'],'generatedAt':datetime.fromisoformat(report['generatedAt']).astimezone(timezone.utc).isoformat(timespec='milliseconds').replace('+00:00','Z'),'strategy':'原V1前收盘对MA20 / 真实持仓只读研究','symbols':[i['symbol'] for i in report['instruments']],'signals':[{'symbol':i['symbol'],'stance':i['stance'],'basis':(i['basis']+'；'+i.get('scenarioAnalysis',{}).get('summary',''))[:4000],'risk':'；'.join(i['risks'])[:4000],'quality':i['quality']} for i in report['instruments']],'backtest':None,'paperTrades':[],'notes':(report['summary']+'；'+'；'.join(report['warnings']))[:10000]}
@@ -122,7 +122,7 @@ def markdown(r):
   if i['backtest']:
    lines+=['','### 同区间价格回测（不是含息总回报）',f"{i['backtest']['from']} 至 {i['backtest']['to']}",'|策略|价格路径收益bps|最大回撤bps|交易次数|费用分|','|---|---:|---:|---:|---:|']
    for x in i['backtest']['comparison']:lines.append(f"|{x['strategy']}|{x['totalReturnBps']}|{x['maxDrawdownBps']}|{x['tradeCount']}|{x['cost']}|")
- lines+=['','## 边界说明',*['- '+w for w in r['warnings']],'','未发送Bark；未启用自动任务；未连接券商。']
+ lines+=['','## 边界说明',*['- '+w for w in r['warnings']],'','本报告生成步骤不发送Bark、不变更计划任务；实际任务和投递状态请查看运行状态。未连接券商账户。']
  return '\n'.join(lines)+'\n'
 
 def run_analysis(root=None, *, deadline=None):
