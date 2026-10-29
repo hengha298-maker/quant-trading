@@ -31,6 +31,7 @@ NS = {"m": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
 REL_NS = "http://schemas.openxmlformats.org/package/2006/relationships"
 DOC_REL = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
 ALIASES = {
+    "availableQuantity": {"可卖数量", "可用股份", "可用数量", "可卖股份", "availablequantity"},
     "symbol": {"证券代码", "股票代码", "代码", "symbol", "ticker"},
     "name": {"证券名称", "股票名称", "名称", "name"},
     "quantity": {"股票余额", "持仓数量", "证券数量", "持有数量", "股份余额", "数量", "quantity"},
@@ -338,6 +339,10 @@ def _table(rows: list[list[str]]) -> tuple[list[dict], str | None, list[str]]:
             "reportedMarketValue": _decimal(get("reportedMarketValue"), "市值", number),
             "reportedPnl": _decimal(get("reportedPnl"), "盈亏", number, nonnegative=False),
         })
+        if get('availableQuantity'):
+            available=_quantity(get('availableQuantity'),number)
+            if available>positions[-1]['quantity']:_fail('AVAILABLE_QUANTITY_INVALID','可卖数量不能超过持有数量，请核对字段含义。')
+            positions[-1]['availableQuantity']=available
     if len(positions) > MAX_ROWS or not positions:
         _fail("EMPTY_POSITIONS", "没有可导入的沪深证券持仓；不会用空数据覆盖现有持仓。")
     if len(cash_values) > 1:
@@ -456,6 +461,8 @@ def _validate_preview(preview: dict, *, check_expiry: bool = True):
         symbols.add(p["symbol"])
         if isinstance(p.get("quantity"), bool) or not isinstance(p.get("quantity"), int) or not 0 <= p["quantity"] <= 10**12:
             _fail("PREVIEW_INVALID", "持仓数量异常。")
+        if 'availableQuantity' in p and (type(p['availableQuantity']) is not int or not 0<=p['availableQuantity']<=p['quantity']):
+            _fail('PREVIEW_INVALID','可卖数量异常。')
         for key in ("costPrice", "reportedMarketValue", "reportedPnl"):
             value = p.get(key)
             if value is not None and (not isinstance(value, str) or _decimal(value, key, i, nonnegative=key != "reportedPnl") != value):

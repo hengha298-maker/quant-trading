@@ -24,6 +24,7 @@ for relative in ("v32", "v33"):
 from goose_research.notify import _configuration, _default_opener, _strict_json
 
 HEALTH_CODES = frozenset({
+    'ACCOUNT_CHANGED_DURING_ANALYSIS',
     "INTRADAY_VERIFIED", "MARKET_INVALID_OR_STALE", "ANALYSIS_FAILED",
     "DEADLINE_EXCEEDED", "CALENDAR_UNVERIFIED", "NOT_A_TRADING_DAY",
     "OUTSIDE_REPORT_WINDOW", "ALREADY_CLAIMED", "REPORT_UNTRUSTED",

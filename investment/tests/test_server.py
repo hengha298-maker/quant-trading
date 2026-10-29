@@ -76,13 +76,33 @@ class PrivateServerTests(unittest.TestCase):
 
     def test_all_private_read_endpoints_require_bearer(self):
         self.report()
-        for path in ['session', 'status', 'latest', 'holdings', 'history', 'report-json', 'report-v31']:
+        for path in ['session', 'status', 'latest', 'holdings', 'history', 'report-json', 'report-v31','ledger','broker-access','automation']:
             with self.subTest(path=path):
                 status, headers, value = self.request('GET', '/investment/api/' + path, authenticated=False)
                 self.assertEqual(status, 401)
                 self.assertEqual(value['error'], 'PRIVATE_ACCESS_REQUIRED')
                 self.assertEqual(headers['Cache-Control'], 'no-store')
                 self.assertNotIn('Access-Control-Allow-Origin', headers)
+
+    def test_incremental_events_preview_confirm_duplicate_and_undo(self):
+        data='成交编号,成交日期,操作,证券代码,成交数量,成交价格,成交金额,总费用,资金发生额\nFictional-T1,2026-10-27,买入,600900,50,10,500,,\n'
+        payload={'fileName':'fictional.csv','content':base64.b64encode(data.encode()).decode(),'broker':'华宝证券','coverageStart':'2026-10-27','coverageEnd':'2026-10-28','completeCoverage':True}
+        code,_,preview=self.request('POST','/investment/api/trade-preview',payload)
+        self.assertEqual(200,code);self.assertEqual(1,len(preview['eventCheck']['newEvents']))
+        code,_,saved=self.request('POST','/investment/api/confirm',{'previewId':preview['previewId'],'confirmed':True})
+        self.assertEqual(200,code);self.assertEqual(1,saved['newCount'])
+        code,_,again=self.request('POST','/investment/api/trade-preview',payload)
+        self.assertEqual(0,len(again['eventCheck']['newEvents']));self.assertEqual(1,len(again['eventCheck']['duplicateIds']))
+        code,_,voided=self.request('POST','/investment/api/trade-undo',{'batchId':saved['batchId'],'confirmed':True})
+        self.assertEqual(200,code);self.assertEqual('voided-original-retained',voided['status'])
+        self.assertEqual(0,self.request('GET','/investment/api/ledger')[2]['storedEventCount'])
+        self.assertEqual(1,len(list((self.root/'investment/work/private/broker-events').glob('*.json'))))
+
+    def test_pause_endpoint_requires_confirmation_and_preserves_task(self):
+        self.assertEqual(400,self.request('POST','/investment/api/automation-control',{'paused':True})[0])
+        self.assertEqual(200,self.request('POST','/investment/api/automation-control',{'paused':True,'confirmed':True})[0])
+        from investment.operations import pause_state
+        self.assertTrue(pause_state(self.root)['paused'])
 
     def test_dns_rebinding_and_cross_origin_requests_denied(self):
         for headers in [{'Host': 'malicious.example'}, {'Origin': 'https://malicious.example'}, {'Sec-Fetch-Site': 'cross-site'}]:

@@ -27,13 +27,16 @@ def latest_holdings(root=None):
  from .holdings import load_latest_by_broker
  accounts=load_latest_by_broker(work(root)/'private'/'holdings')
  if not accounts:return None
+ source_accounts=accounts
+ from .ledger import apply_events
+ accounts=apply_events(root or ROOT,accounts)
  names=[a.get('source',{}).get('broker','用户导出') for a in accounts]
  missing=[name for name in ['华宝证券','银河证券'] if name not in names]
  positions=[]
  for a in accounts:
   for p in a['positions']:positions.append({**p,'broker':a['source']['broker'],'holdingAsOf':a['asOf']})
  cash=None if missing or any(a.get('availableCash') is None for a in accounts) else money(sum(D(a['availableCash']) for a in accounts))
- return {'asOf':min(a['asOf'] for a in accounts),'positions':positions,'availableCash':cash,'accounts':accounts,'missingBrokers':missing}
+ return {'asOf':min(a['asOf'] for a in accounts),'positions':positions,'availableCash':cash,'accounts':accounts,'sourceAccounts':source_accounts,'missingBrokers':missing}
 
 def metrics(dataset, day):
  from .indicators import previous_session_metrics
@@ -42,6 +45,14 @@ def metrics(dataset, day):
 def portfolio(holdings, quotes, day):
  from .accounting import build_portfolio
  return build_portfolio(holdings, quotes, day)
+
+def account_evidence_digest(root):
+ import hashlib
+ from .holdings import load_latest_by_broker
+ from .ledger import load_batches
+ accounts=load_latest_by_broker(work(root)/'private/holdings');batches=load_batches(root)
+ evidence={'snapshots':[(a.get('snapshotId'),a.get('sourceSha256')) for a in accounts],'activeBatches':sorted((b['batchId'],b['sha256']) for b in batches)}
+ return hashlib.sha256(json.dumps(evidence,sort_keys=True,separators=(',',':')).encode()).hexdigest()
 
 def build_analysis(market,holdings,*,now=None):
  from goose_research.backtest import run_comparison
@@ -82,11 +93,13 @@ def build_analysis(market,holdings,*,now=None):
   if not holdings:risks.insert(0,'尚无当前真实持仓，以下是关注标的研究，不能声称分析了真实账户。')
   from .scenarios import build_scenarios
   scenario=build_scenarios(symbol,q,m,pf,now=clock,dataset=ds)
+  from .research import build_research
+  extended=build_research(symbol,ds,adjusted,pf,clock)
   if stance!='watch':
    directional=next((s for s in scenario['scenarios'] if s['id']==stance),None)
    if not scenario['evidenceQuality']['currentIntradayVerified'] or not directional or directional['status'] not in {'conditional-fit','conditional'}:
     stance='watch';signal='观察、不操作；方向研究条件未通过'
-  instruments.append({'scenarioAnalysis':scenario,'symbol':symbol,'name':NAMES.get(symbol,symbol),'quote':q,'signal':signal,'stance':stance,'basis':basis,'risks':risks,'metrics':m,'backtest':bt,'quality':'low'})
+  instruments.append({'research':extended,'scenarioAnalysis':scenario,'symbol':symbol,'name':NAMES.get(symbol,symbol),'quote':q,'signal':signal,'stance':stance,'basis':basis,'risks':risks,'metrics':m,'backtest':bt,'quality':'low'})
  valid_dates=[x['quote']['sourceTimestamp'][:10] for x in instruments if x['quote']]
  mode='intraday' if any(i['quote'] and i['quote'].get('quality',{}).get('status')=='intraday-verified' for i in instruments) else 'closing-snapshot' if any(i['quote'] and i['quote'].get('quality',{}).get('status')=='closing-snapshot' for i in instruments) else 'historical-or-blocked'
  return {'dataMode':mode,'format':'goose-live-research','version':1,'id':str(uuid.uuid4()),'generatedAt':clock.isoformat(),'asOf':min(valid_dates) if valid_dates else day,'status':'portfolio-research' if pf['status']=='current-user-confirmed' else 'holdings-required','summary':('收盘后研究：观察，不操作。' if mode=='closing-snapshot' else '本次研究：观察，不必操作。')+('已结合用户确认的当日持仓。' if pf['status']=='current-user-confirmed' else '缺少当日确认持仓，不能形成当前账户分析。'),'warnings':list(dict.fromkeys([*pf['warnings'],*LIMITS])),'portfolio':pf,'instruments':instruments,'diagnostics':market.get('diagnostics',[]),'marketContext':market.get('context',{}),'notificationSent':False,'scheduleEnabled':False,'realOrdersEnabled':False}
@@ -102,6 +115,10 @@ def markdown(r):
    lines += ['',i['scenarioAnalysis']['summary']]
    for scenario in i['scenarioAnalysis']['scenarios']:lines += [f"- {scenario['label']}（{scenario['status']}）：{scenario['trigger']}"]
   if i['metrics']:lines.append('趋势指标：'+json.dumps(i['metrics'],ensure_ascii=False))
+  if i.get('research'):
+   lines+=['','### 扩展趋势与风险研究（非已验证实盘策略）']
+   for plugin in i['research']['plugins']:
+    lines += [plugin['summary'],plugin.get('trigger',''),plugin.get('invalidation','')]
   if i['backtest']:
    lines+=['','### 同区间价格回测（不是含息总回报）',f"{i['backtest']['from']} 至 {i['backtest']['to']}",'|策略|价格路径收益bps|最大回撤bps|交易次数|费用分|','|---|---:|---:|---:|---:|']
    for x in i['backtest']['comparison']:lines.append(f"|{x['strategy']}|{x['totalReturnBps']}|{x['maxDrawdownBps']}|{x['tradeCount']}|{x['cost']}|")
@@ -115,10 +132,21 @@ def run_analysis(root=None, *, deadline=None):
  from .runtime_lock import analysis_mutex
  with analysis_mutex(w):
   folder=w/'runs'/(datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')+'-'+uuid.uuid4().hex[:8]);folder.mkdir(parents=True,exist_ok=False)
+  start_evidence=account_evidence_digest(root or ROOT)
   holdings=latest_holdings(root);symbols=list(dict.fromkeys(DEFAULT_SYMBOLS+[p['symbol'] for p in (holdings or {}).get('positions',[])]))
   try:market=collect_market(symbols,folder/'market',deadline=deadline)
   except (ValueError,OSError):market={'quotes':{},'histories':{},'diagnostics':[{'errors':['MARKET_COLLECTION_FAILED_NO_OLD_SIGNAL_REUSE']} ]}
   report=build_analysis(market,holdings)
+  from .ledger import account_views
+  from .research import portfolio_risk
+  report['accountLedger']=account_views(root or ROOT,(holdings or {}).get('sourceAccounts',(holdings or {}).get('accounts',[])))
+  if holdings and report['status']=='holdings-required' and report['portfolio']['status']=='stale-snapshot':
+   report['status']='dated-portfolio-research';report['summary']=('收盘快照研究：观察，不操作。' if report['dataMode']=='closing-snapshot' else '本次研究：观察，不必操作。')+'使用'+holdings['asOf']+'最近确认的持仓快照及明确标注的成交推演重估；未确认期间是否有其他交易，不能称为券商实时账户。'
+  report['portfolioRisk']=portfolio_risk(market.get('histories',{}),datetime.now(timezone.utc))
+  report['accountMode']='real-snapshots-readonly-no-broker-connection'
+  report['accountEvidenceDigest']=start_evidence
+  if account_evidence_digest(root or ROOT)!=start_evidence:
+   report['sourceChanged']=True;report['warnings'].insert(0,'分析期间账户记录发生变化，本报告不作当前账户判断。')
   if deadline is not None and datetime.now(timezone.utc)>=deadline:
    report['deadlineMissed']=True;report['warnings'].insert(0,'报告已超过预定截止时刻，不可作为14:45前报告发送。')
   healthy=sum(bool(q and q.get('quality',{}).get('status') in {'closing-snapshot','intraday-verified'}) for q in market.get('quotes',{}).values())
@@ -128,13 +156,21 @@ def run_analysis(root=None, *, deadline=None):
   write_json(folder/'report.json',report);write_json(folder/'goose-report-v31.json',compatible_report(report));(folder/'report.md').write_text(markdown(report),encoding='utf8')
   return report
 
-def mark_report_freshness(report, *, now=None):
+def mark_report_freshness(report, *, now=None, root=None):
  from copy import deepcopy
  result=deepcopy(report);day=(now or datetime.now(timezone.utc)).astimezone(BJ).date().isoformat()
  try:generated=datetime.fromisoformat(report['generatedAt']).astimezone(BJ).date().isoformat()
  except (ValueError,KeyError):generated=None
  result['cachedReport']=True
  clock=now or datetime.now(timezone.utc)
+ if root is not None and report.get('accountEvidenceDigest'):
+  try:changed=report['accountEvidenceDigest']!=account_evidence_digest(root)
+  except (ValueError,OSError):changed=True
+  if changed:
+   result['status']='account-source-changed';result['summary']='账户或成交记录已变化，请生成新报告；这份报告只作历史参考。'
+   result.setdefault('warnings',[]).insert(0,'持仓/成交证据指纹已改变，旧报告不得冒充新账户分析。')
+   result.setdefault('portfolio',{})['status']='source-changed'
+   for item in result.get('instruments',[]):item['stance']='watch';item['signal']='账户记录已变，观察等待新报告'
  for item in result.get('instruments',[]):
   quote=item.get('quote')
   if quote and quote.get('quality',{}).get('status')=='intraday-verified':
@@ -167,4 +203,4 @@ def load_latest(root=None):
   p=folder/'report.json'
   if p.is_file() and not p.is_symlink() and not p.is_junction() and p.stat().st_size<4*1024*1024:files.append(p)
  files.sort(key=lambda p:p.stat().st_mtime_ns,reverse=True)
- return mark_report_freshness(json.loads(files[0].read_text(encoding='utf8'))) if files else None
+ return mark_report_freshness(json.loads(files[0].read_text(encoding='utf8')),root=root or ROOT) if files else None

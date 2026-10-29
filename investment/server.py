@@ -131,7 +131,7 @@ def make_server(root, port=9395, host='127.0.0.1', analyze=None, *, allowed_host
                 value['message'] = str(error)
             self._json(status, value)
 
-        def _preview_response(self, preview):
+        def _preview_response(self, preview, extra=None):
             preview_id = secrets.token_urlsafe(24)
             with state_lock:
                 now = time.monotonic()
@@ -142,7 +142,14 @@ def make_server(root, port=9395, host='127.0.0.1', analyze=None, *, allowed_host
                     self._json(409, {'error': 'TOO_MANY_PENDING_PREVIEWS'})
                     return
                 previews[preview_id] = (now, preview)
-            self._json(200, {'previewId': preview_id, 'preview': preview})
+            self._json(200, {'previewId': preview_id, 'preview': preview, **(extra or {})})
+
+        def _position_preview(self,preview):
+            from .ledger import load_batches,project,reconcile
+            from .holdings import load_latest_by_broker
+            baseline=next((a for a in load_latest_by_broker(repo/'investment/work/private/holdings') if a['source']['broker']==preview['source']['broker'] and a['asOf'][:10]<=preview['asOf'][:10]),None)
+            comparison=reconcile(project(baseline,load_batches(repo),preview['asOf'][:10]),preview) if baseline else None
+            self._preview_response(preview,{'reconciliation':comparison})
 
         def _guard(self, mutation=False):
             if len(self.headers.get_all('Host', [])) != 1 or self.headers.get('Host', '').lower() not in hosts:
@@ -184,7 +191,7 @@ def make_server(root, port=9395, host='127.0.0.1', analyze=None, *, allowed_host
             elif route == PREFIX + 'latest':
                 from .engine import mark_report_freshness
                 reports = _reports(repo)
-                self._json(200, {'report': mark_report_freshness(reports[0][2]) if reports else None})
+                self._json(200, {'report': mark_report_freshness(reports[0][2],root=repo) if reports else None})
             elif route == PREFIX + 'history':
                 self._json(200, {'reports': [{'id': item[2]['id'], 'generatedAt': item[2].get('generatedAt'), 'asOf': item[2].get('asOf'), 'status': item[2].get('status'), 'summary': item[2].get('summary')} for item in _reports(repo)[:100]]})
             elif route.startswith(PREFIX + 'history/'):
@@ -195,11 +202,20 @@ def make_server(root, port=9395, host='127.0.0.1', analyze=None, *, allowed_host
                 report = next((item[2] for item in _reports(repo) if item[2]['id'] == identifier), None)
                 if report:
                     from .engine import mark_report_freshness
-                    report = mark_report_freshness(report)
+                    report = mark_report_freshness(report,root=repo)
                 self._json(200 if report else 404, {'report': report} if report else {'error': 'REPORT_MISSING'})
             elif route == PREFIX + 'automation':
-                from .daily import latest_daily, schedule_plan
-                self._json(200, {'schedule': schedule_plan(), 'latest': latest_daily(repo), 'enabled': False})
+                from .operations import automation_status
+                self._json(200, automation_status(repo))
+            elif route == PREFIX + 'ledger':
+                try:
+                    from .ledger import account_views
+                    from .holdings import load_latest_by_broker
+                    self._json(200, account_views(repo,load_latest_by_broker(repo/'investment/work/private/holdings')))
+                except (ValueError,OSError):self._json(409,{'error':'LEDGER_INVALID_NO_SILENT_RECOVERY','message':'成交账本校验失败，已停止推演；原持仓未更改。'})
+            elif route == PREFIX + 'broker-access':
+                from .broker_access import status
+                self._json(200,status())
             elif route == PREFIX + 'holdings':
                 try:
                     from .holdings import load_latest, load_latest_by_broker
@@ -287,6 +303,24 @@ def make_server(root, port=9395, host='127.0.0.1', analyze=None, *, allowed_host
                             state.update(running=False, finishedAt=datetime.now(timezone.utc).isoformat())
                 threading.Thread(target=job, name='goose-read-only-analysis', daemon=True).start()
                 self._json(202, {'status': 'started'})
+            elif route == PREFIX + 'trade-preview':
+                try:
+                    from .ledger import parse_events,classified
+                    suffix=Path(str(body.get('fileName',''))).suffix.lower()
+                    raw=base64.b64decode(body.get('content',''),validate=True)
+                    preview=parse_events(raw,suffix,broker=body.get('broker'),coverage_start=body.get('coverageStart'),coverage_end=body.get('coverageEnd'),complete=body.get('completeCoverage') is True)
+                    self._preview_response(preview,{'eventCheck':classified(preview,repo)})
+                except (ValueError,TypeError,OSError,binascii.Error) as exc:self._import_error(exc,default='EVENT_IMPORT_INVALID')
+            elif route == PREFIX + 'trade-undo':
+                try:
+                    from .ledger import undo
+                    self._json(200,undo(repo,body.get('batchId'),confirmed=body.get('confirmed')))
+                except (ValueError,OSError) as exc:self._import_error(exc,default='EVENT_UNDO_FAILED')
+            elif route == PREFIX + 'automation-control':
+                try:
+                    from .operations import set_paused
+                    self._json(200,set_paused(repo,body.get('paused'),confirmed=body.get('confirmed')))
+                except (ValueError,OSError):self._json(400,{'error':'EXPLICIT_PAUSE_STATE_REQUIRED'})
             elif route == PREFIX + 'preview':
                 try:
                     from .holdings import parse_file
@@ -314,7 +348,7 @@ def make_server(root, port=9395, host='127.0.0.1', analyze=None, *, allowed_host
                         preview = parse_file(file_path, as_of=as_of, broker=broker)
                     finally:
                         file_path.unlink(missing_ok=True)
-                    self._preview_response(preview)
+                    self._position_preview(preview)
                 except (ValueError, TypeError, OSError, binascii.Error) as exc:
                     code = getattr(exc, 'code', None) or (str(exc) if str(exc) in {'STRUCTURED_CSV_OR_XLSX_REQUIRED', 'FILE_LIMIT', 'DATE_OR_BROKER_INVALID', 'TOO_MANY_PENDING_PREVIEWS'} else 'IMPORT_INVALID')
                     self._import_error(exc, default=code)
@@ -326,7 +360,7 @@ def make_server(root, port=9395, host='127.0.0.1', analyze=None, *, allowed_host
                         self._json(400, {'error': 'SELECT_HUABAO_OR_GALAXY'})
                         return
                     preview = parse_manual(body.get('rows'), as_of=body.get('asOf'), broker=broker, available_cash=body.get('availableCash'))
-                    self._preview_response(preview)
+                    self._position_preview(preview)
                 except (ValueError, TypeError, OSError) as exc:
                     self._import_error(exc, default='MANUAL_IMPORT_INVALID')
             elif route == PREFIX + 'confirm':
@@ -342,11 +376,15 @@ def make_server(root, port=9395, host='127.0.0.1', analyze=None, *, allowed_host
                     self._json(409, {'error': 'PREVIEW_EXPIRED_REIMPORT'})
                     return
                 try:
-                    from .holdings import commit_preview
-                    result = commit_preview(pending[1], repo / 'investment' / 'work' / 'private' / 'holdings', confirmed=True)
+                    if pending[1].get('format')=='goose-broker-event-preview':
+                        from .ledger import confirm
+                        result=confirm(pending[1],repo,confirmed=True)
+                    else:
+                        from .holdings import commit_preview
+                        result = commit_preview(pending[1], repo / 'investment' / 'work' / 'private' / 'holdings', confirmed=True)
                     with state_lock:
                         previews.pop(body['previewId'], None)
-                    self._json(200, {key: result[key] for key in ['status', 'sha256', 'snapshotId'] if key in result})
+                    self._json(200, {key: result[key] for key in ['status', 'sha256', 'snapshotId','batchId','newCount','duplicateCount'] if key in result})
                 except (ValueError, OSError) as exc:
                     self._import_error(exc, status=409, default='IMPORT_FAILED')
             else:

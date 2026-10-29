@@ -55,6 +55,8 @@ def _report_health(report, clock):
         holdings = "missing"
     if report.get("deadlineMissed") is True:
         return "DEADLINE_EXCEEDED", True, holdings
+    if report.get('sourceChanged') is True:
+        return 'ACCOUNT_CHANGED_DURING_ANALYSIS',True,holdings
     instruments = report.get("instruments", [])
     if not isinstance(instruments, list) or not instruments:
         return "MARKET_INVALID_OR_STALE", True, holdings
@@ -110,6 +112,14 @@ def run_daily(root=None, now=None, generate=None, confirmed_send=False, config_p
         "notification": {"mode": "dry-run", "sent": False, "phoneArrivalVerified": False},
         "schedule": schedule_plan(now=clock)}
     try:
+        from .operations import pause_state
+        if pause_state(root or ROOT).get('paused'):
+            event.update(status='paused',code='LOCAL_ANALYSIS_PAUSED')
+            return _save(root,event)
+    except (ValueError,OSError):
+        event.update(status='blocked',code='LOCAL_CONTROL_INVALID')
+        return _save(root,event)
+    try:
         sessions = _sessions(day)
     except (ValueError, ImportError):
         event["code"] = "CALENDAR_UNVERIFIED"
@@ -153,6 +163,13 @@ def run_daily(root=None, now=None, generate=None, confirmed_send=False, config_p
     event["status"] = "report-ready" if event["code"] == "INTRADAY_VERIFIED" else "diagnostic"
     event["notification"]["preview"] = "观察，不执行交易。" if event["code"] == "INTRADAY_VERIFIED" else "本次数据或流程不合格，不沿用旧信号。"
     if confirmed_send:
+        try:
+            if pause_state(root or ROOT).get('paused'):
+                event['notification']={'mode':'explicit-send','sent':False,'status':'blocked','code':'LOCAL_ANALYSIS_PAUSED_BEFORE_SEND'}
+                return _save(root,event)
+        except (ValueError,OSError):
+            event['notification']={'mode':'explicit-send','sent':False,'status':'blocked','code':'LOCAL_CONTROL_INVALID'}
+            return _save(root,event)
         event["notification"] = {"mode": "explicit-send", **send_daily(event, root,
             config_path, confirmed=True, now=now)}
     return _save(root, event)

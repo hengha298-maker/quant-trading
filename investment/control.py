@@ -105,7 +105,7 @@ def open_control(root, port=9394):
    webbrowser.open(desktop())
   ttk.Button(frame,text='重置手机链接（撤销旧链接）',command=reset_phone).pack(fill='x',pady=4)
   ttk.Label(frame,textvariable=status,wraplength=590).pack(anchor='w',pady=8)
-  ttk.Label(frame,text='自动14:45任务尚未启用。Bark尚未发送。\n关闭窗口会停止共享；重启可继续用原链接。报告不会删除。',wraplength=590).pack(anchor='w',pady=8)
+  ttk.Label(frame,text='每日任务状态请在投资页面查看；本窗口不会额外发送Bark。\n关闭窗口仅停止网页分享，后台日报任务独立运行；重启沿用原链接。',wraplength=590).pack(anchor='w',pady=8)
   def first_analysis():
    # Only self-loopback: no Bark, schedule or cross-service send.
    from urllib.request import Request, build_opener, ProxyHandler

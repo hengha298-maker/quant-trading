@@ -24,9 +24,11 @@ from decimal import Decimal
 root=Path(sys.argv[1]);sys.path.insert(0,str(root))
 from investment.engine import build_analysis,compatible_report
 from investment.server import make_server
+from investment import operations
+operations._task_status=lambda:{'known':True,'enabled':True,'state':'Ready','lastRun':None,'nextRun':None}
 from goose_research.market import xshg_sessions
 now=datetime.now(timezone(timedelta(hours=8)));day=now.date().isoformat()
-days=xshg_sessions((now-timedelta(days=100)).date().isoformat(),day)[-40:]
+days=xshg_sessions((now-timedelta(days=180)).date().isoformat(),day)[-80:]
 symbols=['600900.SH','515450.SH'];histories={};quotes={};adjusted={}
 for symbol in symbols:
  bars=[]
@@ -92,6 +94,24 @@ async function main(){
     await scenario.locator('summary').click();assert.equal(await scenario.getAttribute('open'),null);
     const layout=await page.evaluate(()=>({viewport:innerWidth,width:document.documentElement.scrollWidth,body:document.body.scrollWidth}));
     assert.ok(layout.width<=layout.viewport+1&&layout.body<=layout.viewport+1,'390px viewport overflow: '+JSON.stringify(layout));
+    assert.equal(await page.locator('nav .tab').count(),4);
+    await page.locator('[data-page="research"]').click();
+    assert.equal(await page.locator('#research-report .card').count(),2);
+    assert.ok((await page.locator('#research-report').innerText()).includes('MA60'));
+    assert.equal(await page.locator('#research-report svg').count(),2);
+    await page.locator('[data-page="holdings"]').click();
+    await page.locator('#broker').selectOption('华宝证券');
+    await page.locator('#trade-start').fill('2026-10-27');await page.locator('#trade-end').fill('2026-10-28');
+    const fictionalCSV='成交编号,成交日期,操作,证券代码,成交数量,成交价格,成交金额,总费用,资金发生额\nBROWSER-FICTIONAL-1,2026-10-27,买入,600900,10,10,100,,\n';
+    await page.locator('#trade-file').setInputFiles({name:'fictional.csv',mimeType:'text/csv',buffer:Buffer.from(fictionalCSV)});
+    await page.locator('#trade-form button[type="submit"]').click();await page.locator('#trade-confirm').waitFor({state:'visible'});
+    assert.ok((await page.locator('#trade-preview').innerText()).includes('新增1条'));
+    await page.locator('#trade-confirm').click();await page.waitForFunction(()=>document.querySelector('#trade-message').textContent.includes('已追加1条'));
+    await page.locator('#ledger-state button').waitFor();page.once('dialog',dialog=>dialog.accept());
+    await page.locator('#ledger-state button').click();await page.waitForFunction(()=>document.querySelectorAll('#ledger-state button').length===0);
+    const accountLayout=await page.evaluate(()=>({viewport:innerWidth,width:document.documentElement.scrollWidth}));assert.ok(accountLayout.width<=accountLayout.viewport+1,'holdings page overflow');
+    assert.ok((await page.locator('#automation-status').innerText()).includes('已启用'));
+    await page.locator('[data-page="overview"]').click();
     const presentation=await context.request.get(base+'/investment/presentation.js');assert.equal(presentation.status(),200);
     if(round===0){
      const artifacts=path.join(root,'investment','work','fictional-browser-artifacts');fs.mkdirSync(artifacts,{recursive:true});
@@ -100,7 +120,7 @@ async function main(){
    }finally{await context.close();}
   }
   assert.deepEqual(errors,[],'JavaScript orconsoleerrors');assert.deepEqual(external,[],'unexpectedexternalrequests');assert.deepEqual(failed,[],'HTTPerrors');
-  console.log(JSON.stringify({passed:true,fictionalDataOnly:true,headless:true,viewport:390,freshContexts:2,externalRequests:0,javascriptErrors:0,checks:['rendering','asset-200','unique-symbol-label','two-decimal-percent','broker-vs-computed-pnl','scenario-toggle','bookmark-fragment','no-horizontal-overflow']},null,2));
+  console.log(JSON.stringify({passed:true,fictionalDataOnly:true,headless:true,viewport:390,freshContexts:2,externalRequests:0,javascriptErrors:0,checks:['rendering','asset-200','unique-symbol-label','two-decimal-percent','broker-vs-computed-pnl','scenario-toggle','bookmark-fragment','no-horizontal-overflow','four-pages','ma60-chart','trade-preview-confirm-undo','real-task-state-rendering']},null,2));
  }finally{
   if(browser)await browser.close();
   if(server&&!closed){server.stdin.write('stop\n');server.stdin.end();await Promise.race([new Promise(resolve=>server.once('exit',resolve)),new Promise(resolve=>setTimeout(resolve,5000))]);if(!closed)server.kill();}
