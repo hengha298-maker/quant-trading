@@ -62,7 +62,8 @@ trust_key=hashlib.sha256(b'FICTIONAL-TRUST-STUDY').hexdigest();trust_study['inpu
 candidate['through']=complete_session(now)
 candidate['trustResearch']={'status':'ready','dataTrustGrade':'TEST','dataTrustLabel':'FICTIONAL 完全虚构的证据展示','advantageConclusion':'尚未证明优于买入持有','sourceEvidence':{'from':'2024-09-02','to':trust_study['to'],'verifiedEvents':0,'complete':False,'missingIntervals':[{'from':'2026-01-01','to':trust_study['to']}],'sources':[],'events':[]},'current':trust_summary(trust_study,trust_key),'verifiedWindow':trust_summary(trust_study,trust_key)}
 report['testData']=True
-report['opportunityRadar']={'synthetic':False,'through':complete_session(now),'groups':{'etf':{'candidates':[candidate]},'stock':{'candidates':[],'message':'暂无符合条件的机会'}},'items':[candidate],'limitations':['FICTIONAL TEST ONLY']}
+from investment.radar import FACTOR_BASIS
+report['opportunityRadar']={'synthetic':False,'factorBasis':FACTOR_BASIS,'modelRevision':2,'through':complete_session(now),'groups':{'etf':{'candidates':[candidate]},'stock':{'candidates':[],'message':'暂无符合条件的机会'}},'items':[candidate],'limitations':['FICTIONAL TEST ONLY']}
 for instrument in report['instruments']:
  instrument['name']=next(p['name'] for p in holdings['positions'] if p['symbol']==instrument['symbol'])
 work=root/'investment'/'work';work.mkdir(exist_ok=True)
@@ -103,6 +104,8 @@ async function main(){
     assert.equal(await page.evaluate(()=>sessionStorage.getItem('goose-private-access')),key);
     assert.equal(await page.locator('#report .instrument').count(),2);
     assert.ok((await page.locator('#opportunity-radar').innerText()).includes('每日投资机会雷达'));
+    assert.match(await page.locator('#opportunity-radar').innerText(),/20日标的动量与60日相对动量使用逐日对应的未复权价格/);
+    assert.match(await page.locator('#opportunity-radar').innerText(),/60\/120日标的动量.*保留前复权口径/);
     assert.ok((await page.locator('#opportunity-radar').innerText()).includes('暂无符合条件的机会'));
     const candidate=page.locator('#opportunity-radar .scenario').first();await candidate.locator('summary').click();assert.match(await candidate.innerText(),/FICTIONAL 失效条件/);
     assert.match(await candidate.innerText(),/尚未证明优于买入持有/);assert.match(await candidate.innerText(),/当前完整含息回测未通过覆盖检查/);

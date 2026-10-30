@@ -15,6 +15,8 @@ export function renderRadar(report){
  if(!r){paragraph(card,'这份历史报告尚无机会雷达，下次分析时生成；不把旧名单称为今天的机会。');target.append(card);return;}
  paragraph(card,`因子截至 ${r.through||'未取得有效日期'} · 最近完整交易日研究，非实时买卖信号。`,'meta');
  paragraph(card,'来源：腾讯公开报价及日线；同源字段/价格口径核验，尚无独立多源验证。','meta');
+ if(r.factorBasis?.momentum20==='unadjusted-subject-price'&&r.factorBasis?.relative60==='unadjusted-price-both-sides')paragraph(card,'指标口径：20日标的动量与60日相对动量使用逐日对应的未复权价格；MA趋势、60/120日标的动量、突破、波动、回撤及持仓相关性保留前复权口径。价格动量不是总回报动量。','basis');
+ else paragraph(card,'这份历史雷达未标记新版20日/60日未复权动量口径，原记录保留，不将旧分数当作修正后结果。','warning');
  if(r.synthetic){paragraph(card,'虚构界面测试，不能用于投资。','warning');target.append(card);return;}
  if(report.testData===true)paragraph(card,'完全虚构的隔离界面测试，不是真实行情或推荐。','warning');
  if(r.accountConstraints){paragraph(card,`持仓依据 ${r.accountConstraints.snapshotAsOf||'未知'}；证券内部最大集中度 ${percentDisplay(r.accountConstraints.securitiesConcentrationPct)}。`);paragraph(card,r.accountConstraints.message,'footnote');}

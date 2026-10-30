@@ -14,6 +14,12 @@ The other four rules do not depend on benchmark indicators, publication times, s
 
 Price-relative and dividend-relative columns now have different declared signal definitions. Differences include trading-path changes as well as cash distributions. They cannot be read as a pure dividend contribution or mixed into a single unlabelled momentum ranking.
 
+## Radar factor basis correction
+
+Radar revision 2 fixes a remaining inconsistency: previously only `relative60` was replaced after calculating qfq indicators, leaving `momentum20` on qfq. Both fields now come from the **same raw/raw indicator call**. Scoring and eligibility use that unadjusted 20-session momentum; the relative 60-session component also remains unadjusted on both sides. Subject raw, benchmark raw and both adjusted calendars must match exactly, without duplicate or reordered dates; no intersection, padding or forward-filling is allowed.
+
+This is deliberately not a wholesale indicator-basis change. MA20/60 trend and slope, subject 60/120-session momentum, breakout, volatility, drawdown and holding correlations retain provider-qfq inputs. Volume/turnover retain raw inputs. Report metadata, factor explanations, trigger/invalidation text and the phone page distinguish these bases. Old radar reports lack the new basis marker and are labelled historical, not reinterpreted. Five-strategy backtest definitions and the fail-closed 2026 dividend-relative policy are unchanged.
+
 ## Reviewed benchmark evidence
 
 The public catalog records implementation notices and original SHA256 hashes for 510300 distributions in January 2024, June 2025 and January 2026. Full 2024/2025 annual distribution tables reconcile to the original notices, and share-change sections show no splits in those years. Per-10-unit announcements are normalized to CNY per unit. Announcement, conservative next-session availability, record, ex-date and payment dates remain distinct; a distribution-reference year is not its payment year.
