@@ -28,6 +28,10 @@
 - 无外部资金流时给区间收益率。有资金流时可给按日末流量加权的Modified Dietz**估计**；不冒充TWR或MWR。保留净资产、逐日外部现金流及期间接口，后续在现金流时点估值齐备后再计算TWR、具备完整时间现金流后再验证MWR唯一性。[GIPS关于外部现金流与TWR的说明](https://www.gipsstandards.org/standards/gips-standards-for-firms/gips-standards-handbook-for-firms/)
 - 两家同期间、各自核对通过后才合并收益；不把跨账户资金移动当成盈利，不猜测行业穿透或投资预算。
 
+快照推演project分别判断executions和cash覆盖。仅成交来源不充当到账现金，现金按cashDate入账，关联SETTLEMENT只替代对应成交现金一次；没有有效关联时记录问题并跳过。覆盖或到账证据不足时不输出完整现金桥接；资金桥接也不等于可用资金或账户总现金。
+
+Windows权限须以NTFS DACL实测为准；POSIX模式位或chmod(0600/0700)不等于Windows DACL，也不能证明其他Windows用户无法读取。权限审计只读记录实际允许/拒绝、继承及所有者；本轮不修改ACL。具体账户身份和本机路径仅留在本机审计记录。
+
 ## 备份范围和兼容
 
 新完整包：`goose-investment-encrypted` v1，内部 `goose-investment-full` v1；Windows记录清单 `goose-investment-ledger-state` v1。包含全部持仓快照、原始归一化事件批次（含旧v1和新v2）、撤销、期初/期末对账证据、成本口径、字段映射、来源SHA/版本/确认元数据，以及**当前浏览器同源**旧账本。记录逐文件SHA256与总清单指纹。

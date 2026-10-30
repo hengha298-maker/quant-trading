@@ -12,6 +12,8 @@ The previous event-account model applied known subject dividends to its indicato
 
 The other four rules do not depend on benchmark indicators, publication times, stale marks or event-index availability. Missing benchmark action evidence does not suppress their accounts or change their outputs. Adding official 510300 events can legitimately change 510300's **own** non-relative accounts; that is separately reported, not hidden as an unrelated-rule regression.
 
+Indicator-dependent non-relative rules still require their **own** complete 61-session warm-up plus evaluation-period action evidence for cash/reinvestment results. Complete 2025 account coverage alone cannot certify an indicator window reaching into uncovered 2024. Buy-and-hold does not use a trend/momentum indicator and requires its account-period coverage instead. Price studies remain explicitly limited research. Event-cache revision 4 adds the subject warm-up certificate to its input key and preserves prior revision-3 files without reusing them.
+
 Price-relative and dividend-relative columns now have different declared signal definitions. Differences include trading-path changes as well as cash distributions. They cannot be read as a pure dividend contribution or mixed into a single unlabelled momentum ranking.
 
 ## Radar factor basis correction

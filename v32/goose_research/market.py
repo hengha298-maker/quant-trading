@@ -234,7 +234,10 @@ def validate_dataset(doc):
     if bar_dates != sessions:
         _fail("BAR_DATES_DUPLICATE_UNSORTED_OR_MISSING")
     quality = doc["quality"]
-    _obj(quality, {"status", "crossValidated", "warnings", "unitVerified", "corporateActionsVerified"}, "QUALITY", {"unitEvidence"})
+    _obj(quality, {"status", "crossValidated", "warnings", "unitVerified", "corporateActionsVerified"}, "QUALITY", {"unitEvidence","pricePrecisionVerified","sameDateQuoteScaleVerified","scaleCheckStatus"})
+    if 'pricePrecisionVerified' in quality and type(quality['pricePrecisionVerified']) is not bool:_fail('QUALITY_PRECISION_FLAG_INVALID')
+    if 'sameDateQuoteScaleVerified' in quality and quality['sameDateQuoteScaleVerified'] is not None and type(quality['sameDateQuoteScaleVerified']) is not bool:_fail('QUALITY_SCALE_FLAG_INVALID')
+    if 'scaleCheckStatus' in quality and quality['scaleCheckStatus'] not in {'not-available','passed','failed'}:_fail('QUALITY_SCALE_STATUS_INVALID')
     if quality["status"] not in ("validated", "blocked", "synthetic"):
         _fail("QUALITY_STATUS_INVALID")
     for field in ("crossValidated", "unitVerified", "corporateActionsVerified"):

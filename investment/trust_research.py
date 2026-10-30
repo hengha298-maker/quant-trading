@@ -10,7 +10,7 @@ from .strategy_lab import PARTITIONS,CONFIG
 from .total_return import compare
 from .benchmark_basis import policy as relative_policy,proof
 
-REVISION=3
+REVISION=4
 
 def _trim(dataset,start,end):
     d=deepcopy(dataset);rows=d['bars'];eligible=[i for i,r in enumerate(rows) if start<=r['date']<=end]
@@ -21,7 +21,7 @@ def _trim(dataset,start,end):
 def _study(root,raw,benchmark,spec,doc,start,end,deadline):
     raw=_trim(raw,start,end);benchmark=_trim(benchmark,start,end)
     first=raw['bars'][61]['date'];last=raw['bars'][-1]['date']
-    def certification():return {'portfolio':proof(doc,spec['symbol'],first,last,root),'relative':relative_policy(doc,spec['symbol'],benchmark['symbol'],raw['bars'][0]['date'],last,root)}
+    def certification():return {'portfolio':proof(doc,spec['symbol'],first,last,root),'indicator':proof(doc,spec['symbol'],raw['bars'][0]['date'],last,root),'relative':relative_policy(doc,spec['symbol'],benchmark['symbol'],raw['bars'][0]['date'],last,root)}
     certificates=certification()
     key=hashlib.sha256(_canonical({'revision':REVISION,'raw':raw['bars'],'benchmark':benchmark['bars'],'spec':spec,'evidence':doc,'certificates':certificates,'config':CONFIG,'partitions':PARTITIONS,'from':start,'to':end})).hexdigest()
     folder=_safe_path(Path(root)/'investment/work/radar/labs',missing=True);folder.mkdir(parents=True,exist_ok=True);path=folder/(key+'.json')
@@ -37,6 +37,7 @@ def _study(root,raw,benchmark,spec,doc,start,end,deadline):
     # degraded study, preserving the old record and the four independent rules.
     if certification()!=certificates:raise ValueError('TRUST_EVIDENCE_CHANGED_DURING_RESEARCH')
     if result['relativeMomentumPolicy']!=certificates['relative']:raise ValueError('TRUST_CACHE_POLICY_MISMATCH')
+    if result.get('indicatorActionCoverage')!=certificates['indicator']:raise ValueError('TRUST_CACHE_INDICATOR_POLICY_MISMATCH')
     if not path.exists():
         with path.open('xb') as f:f.write(_canonical({'result':result,'sha256':hashlib.sha256(_canonical(result)).hexdigest()}))
     return result,key

@@ -128,6 +128,12 @@ class PrivateServerTests(unittest.TestCase):
         self.assertEqual(self.request('POST', '/investment/api/analyze', {})[0], 202)
         self.assertTrue(self.started.wait(1))
         self.assertEqual(self.request('POST', '/investment/api/analyze', {})[0], 409)
+
+    def test_explicit_manual_analysis_remains_allowed_while_automatic_analysis_paused(self):
+        from investment.operations import set_paused
+        set_paused(self.root,True,confirmed=True)
+        self.assertEqual(202,self.request('POST','/investment/api/analyze',{})[0])
+        self.assertTrue(self.started.wait(2))
         self.assertTrue(self.request('GET', '/investment/api/status')[2]['running'])
         self.release.set()
         for _ in range(30):

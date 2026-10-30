@@ -294,10 +294,15 @@ def _daily_parser(raw, symbol, start, end, adjustment="none"):
 def _dataset(symbol, bars, start, end, observation, quote):
     spec = SPECS[symbol]
     sessions = xshg_sessions(start, end)
-    unit_ok = symbol == "600900.SH"
+    tick_ok = all(Decimal(row[key]) % Decimal(spec['tick']) == 0 for row in bars for key in ('open','high','low','close'))
+    quote_row = next((r for r in bars if quote and quote['quality']['status']!='blocked' and r['date']==quote['sourceTimestamp'][:10]),None)
+    comparable = quote_row is not None
+    scale_ok = abs(Decimal(quote_row['close']) - Decimal(quote['price'])) <= Decimal(spec['tick']) if comparable else None
+    unit_ok = symbol == "600900.SH" and tick_ok and scale_ok is not False
     evidence = "AKShare/Tencent reviewed unadjusted CNY field; no independent exchange-feed certification"
+    if symbol=='600900.SH':evidence+='; all raw OHLC checked against 0.01 CNY tick; same-date quote scale '+('unavailable, not certified' if scale_ok is None else 'passed' if scale_ok else 'failed')
     if symbol == "515450.SH" and quote and quote["quality"]["status"] != "blocked":
-        unit_ok = all(Decimal(row[key]) % Decimal(spec["tick"]) == 0 for row in bars for key in ("open", "high", "low", "close"))
+        unit_ok = tick_ok
         # The same-date source comparison is a scale/schema consistency check,
         # not two independent feeds and not a corporate-action reconciliation.
         if bars and bars[-1]["date"] == quote["sourceTimestamp"][:10]:
@@ -308,7 +313,8 @@ def _dataset(symbol, bars, start, end, observation, quote):
         "priceUnit": "CNY-per-share", "fetchedAt": observation["receivedAt"],
         "calendar": {"name": "XSHG", "sessions": sessions, "supportedThrough": calendar_supported_through()},
         "bars": bars, "quality": {"status": "validated" if unit_ok else "blocked", "crossValidated": False,
-            "unitVerified": unit_ok, "unitEvidence": evidence, "corporateActionsVerified": False,
+            "unitVerified": unit_ok, "unitEvidence": evidence, "pricePrecisionVerified":tick_ok,
+            "sameDateQuoteScaleVerified":scale_ok,"scaleCheckStatus":'not-available' if scale_ok is None else 'passed' if scale_ok else 'failed',"corporateActionsVerified": False,
             "warnings": ["PRICE_RETURN_EXCLUDES_CASH_DIVIDENDS_NOT_TOTAL_INVESTMENT_RETURN"]}}
     if symbol == "515450.SH" and etf_anomaly_diagnostics(doc)["status"] == "blocked":
         doc["quality"]["status"] = "blocked"

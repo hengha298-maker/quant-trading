@@ -244,44 +244,46 @@ def validate_events(batch):
   if e.get('sourceRole','combined') not in {'combined','executions','cash'}:fail('EVENT_STORE_INVALID','事件范围无效。')
 
 def project(account,batches,through):
- """A dated position/cash bridge. Never silently promotes it to a live snapshot."""
+ """Independent execution and explicitly dated cash evidence; never live cash."""
+ from .ledger_accounting import coverage,cash_postings
  base=account['asOf'][:10];broker=account['source']['broker'];positions={p['symbol']:p['quantity'] for p in account['positions']}
- relevant=[e for b in batches if b['broker']==broker for e in b['events'] if base<e['date']<=through]
- same=[e for b in batches if b['broker']==broker for e in b['events'] if e['date']==base]
- quantity_changes={};issues=[];cash_change=D(0);cash_known=True;realized=[]
- for e in relevant:
-  if e['kind'] in {'BUY','SELL'}:quantity_changes[e['symbol']]=quantity_changes.get(e['symbol'],0)+(e['quantity'] if e['kind']=='BUY' else -e['quantity'])
-  elif e['kind']=='POSITION_CHANGE':quantity_changes[e['symbol']]=quantity_changes.get(e['symbol'],0)+e['positionDelta']
-  if e['kind'] in {'DIVIDEND_RECEIVABLE','POSITION_CHANGE'}:continue
-  net=e.get('netCash')
-  if net is None:
-   if e['kind']=='CASH_IN':net=e['gross']
-   elif e['kind']=='DIVIDEND' and e.get('fees') is not None:net=str(D(e['gross'])-D(e['fees']))
-   elif e['kind'] in {'CASH_OUT','TAX','FEE'}:net=str(-D(e['gross']))
-   elif e.get('fees') is not None:net=str((-D(e['gross'])-D(e['fees'])) if e['kind']=='BUY' else D(e['gross'])-D(e['fees']))
-  if net is None:cash_known=False
-  else:cash_change+=D(net)
+ all_events=[{**e,'sourceRole':e.get('sourceRole',b.get('sourceRole','combined'))} for b in batches if b['broker']==broker for e in b['events']]
+ def execution_day(e):return e.get('executionDate') or e['date']
+ trades=[e for e in all_events if e['sourceRole'] in {'executions','combined'} and e['kind'] in {'BUY','SELL','POSITION_CHANGE'} and base<execution_day(e)<=through]
+ same=[e for e in all_events if e['sourceRole'] in {'executions','combined'} and e['kind'] in {'BUY','SELL','POSITION_CHANGE'} and execution_day(e)==base]
+ relevant=[e for e in all_events if base<e['date']<=through or e.get('cashDate') and base<e['cashDate']<=through or e in trades]
+ refs={e.get('linkId') for e in relevant if e['kind']=='SETTLEMENT'}
+ context=relevant+[e for e in all_events if e['id'] in refs and e not in relevant]
+ quantity_changes={};issues=[];realized=[]
+ for e in trades:
+  delta=e['positionDelta'] if e['kind']=='POSITION_CHANGE' else e['quantity'] if e['kind']=='BUY' else -e['quantity']
+  quantity_changes[e['symbol']]=quantity_changes.get(e['symbol'],0)+delta
   if e['kind']=='SELL':realized.append(e.get('reportedRealizedPnl'))
  for symbol,delta in quantity_changes.items():positions[symbol]=positions.get(symbol,0)+delta
- if any(q<0 for q in positions.values()):issues.append('推演出现负持仓，可能缺成交、公司行为或基准不正确；停止使用推演数量。')
- if same:issues.append('存在与基准快照同日的事件，未自动计入，避免重复计算；请补充更明确的基准。')
- covered=base
- for b in sorted((x for x in batches if x['broker']==broker and x['completeCoverageDeclared']),key=lambda x:x['coverageStart']):
-  if b['coverageStart']<=(date.fromisoformat(covered)+timedelta(days=1)).isoformat() and b['coverageEnd']>covered:covered=b['coverageEnd']
- complete=covered>=through and not same
- if not complete:issues.append('已导入事件未声明覆盖基准之后的全部日期，不能认定账户已更新完整。')
- cash=account.get('availableCash')
+ negative=any(q<0 for q in positions.values())
+ if negative:issues.append('推演出现负持仓，可能缺成交、公司行为或基准不正确；停止使用推演数量。')
+ if same:issues.append('存在与基准快照同日的成交事件，未自动计入，避免重复计算；请补充更明确的基准。')
+ domains={role:coverage(batches,broker,base,through,role) for role in ('executions','cash')}
+ complete=domains['executions']['completeDeclared'] and not same
+ if not complete:issues.append('成交覆盖不完整，不能认定持仓数量已更新完整。')
+ if not domains['cash']['completeDeclared']:issues.append('现金覆盖不完整，未生成完整现金桥接。')
+ cash_issues=[];postings=cash_postings(context,cash_issues)
+ for e in relevant:
+  if e['sourceRole']=='cash' and e['kind'] in {'BUY','SELL','POSITION_CHANGE'}:cash_issues.append({'code':'CASH_SOURCE_EXECUTION_INVALID','message':'现金来源不得充当成交或股份变动证据。'})
+ posted=[p for p in postings if base<p['date']<=through]
+ cash_known=domains['cash']['completeDeclared'] and not cash_issues
+ cash_change=sum((p['cash'] for p in posted),D(0));cash=account.get('availableCash')
  return {'broker':broker,'baselineAsOf':account['asOf'],'lastUserVerifiedAt':account.get('confirmedAt'),'lastBrokerVerifiedAt':None,
-  'through':through,'projectionStatus':'conflict' if any(q<0 for q in positions.values()) else 'complete-declared-not-broker-verified' if complete else 'partial-events',
+  'through':through,'projectionStatus':'conflict' if negative else 'complete-declared-not-broker-verified' if complete else 'partial-events',
   'source':'用户核对的成交/资金事件推演，不是券商API','eventCount':len(relevant),'sameDayUnapplied':len(same),
-  'projectedQuantities':None if any(q<0 for q in positions.values()) else positions,
+  'projectedQuantities':None if negative else positions,'coverage':domains,'cashIssues':cash_issues,
+  'cashProjectionStatus':'complete-declared-not-broker-verified' if cash_known else 'blocked-incomplete-evidence',
   'cashFlowChange':money(cash_change) if cash_known else None,
   'cashReconciliationBridge':money(D(cash)+cash_change) if cash is not None and cash_known else None,
-  'cashBridgeBasis':'导入可用资金＋已知净发生额的算术桥；冻结/清算状态未知，不代表账户总现金或当前可用资金。',
-  'bookCashProjection':None,
-  'availableCash':None,'frozenCash':None,'sellableQuantity':None,
+  'cashBridgeBasis':'导入可用资金＋明确cashDate净发生额的算术桥；成交本身不是到账证据，冻结/清算未知，不是账户总现金或当前可用资金。',
+  'bookCashProjection':None,'availableCash':None,'frozenCash':None,'sellableQuantity':None,
   'brokerReportedRealizedPnl':money(sum((D(v) for v in realized),D(0))) if complete and realized and all(v is not None for v in realized) else None,
-  'warnings':issues+['账面资金推演不是可用资金；冻结、清算、红利税与缺失费用仍需券商核对。','持仓成本、已实现盈亏和可卖数量未凭成交价格猜测。']}
+  'warnings':issues+[i['message'] for i in cash_issues]+['账面资金推演不是可用资金；冻结、清算、红利税与缺失费用仍需券商核对。','持仓成本、已实现盈亏和可卖数量未凭成交价格猜测。']}
 
 def reconcile(projection,actual):
  expected=projection.get('projectedQuantities');actual_map={p['symbol']:p['quantity'] for p in actual['positions']}

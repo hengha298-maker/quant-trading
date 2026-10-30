@@ -36,13 +36,17 @@ def cash_postings(events,issues):
     for e in events:
         if e['kind']=='SETTLEMENT':
             ref=e.get('linkId')
-            if not ref or ref not in by_id or by_id[ref]['kind'] not in {'BUY','SELL'}:
+            if e.get('sourceRole')=='executions':
+                issues.append(issue('EXECUTION_SOURCE_SETTLEMENT_INVALID','仅成交来源不能作为已到账交收证据。',eventId=e['id']));continue
+            if not ref or ref not in by_id or ref in ambiguous or by_id[ref]['kind'] not in {'BUY','SELL'}:
                 issues.append(issue('UNMATCHED_SETTLEMENT','资金交收记录缺少对应逐笔成交。',eventId=e['id']));continue
             if ref in settled:
                 issues.append(issue('DUPLICATE_SETTLEMENT','同一成交出现多笔资金交收，需核对是否分笔或重复。',eventId=e['id']));continue
             settled[ref]=e
     for e in events:
         kind=e['kind']
+        if kind=='SETTLEMENT' and settled.get(e.get('linkId')) is not e:continue
+        if e.get('sourceRole')=='executions':continue
         if kind in {'DIVIDEND_RECEIVABLE','POSITION_CHANGE'}:continue
         if e.get('includedInEventId'):
             parent=by_id.get(e['includedInEventId'])
@@ -105,7 +109,7 @@ def _period(opening,closing,batches):
     cv={role:coverage(batches,broker,start,end,role) for role in ('executions','cash')}
     for role,c in cv.items():
         if not c['completeDeclared']:issues.append(issue('COVERAGE_GAP','未声明完整覆盖的期间必须核对。',domain=role,period=c['missingPeriod']))
-    all_events=[e for b in batches if b['broker']==broker for e in b['events']]
+    all_events=[{**e,'sourceRole':e.get('sourceRole',b.get('sourceRole','combined'))} for b in batches if b['broker']==broker for e in b['events']]
     events=[e for e in all_events if start<e['date']<=end or e.get('cashDate') and start<e['cashDate']<=end]
     references={e.get('linkId') for e in events if e['kind']=='SETTLEMENT'}
     for e in all_events:

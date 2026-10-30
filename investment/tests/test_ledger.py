@@ -34,7 +34,7 @@ class LedgerTests(unittest.TestCase):
   self.assertIsNone(ledger.project(account(),ledger.load_batches(self.root),'2026-10-28')['cashFlowChange'])
  def test_explicit_net_cash_reconciles_book_cash_not_available_cash(self):
   self.save(self.preview('T1,2026-10-27,买入,600900,50,10,500,2,-502,\n'))
-  p=ledger.project(account(),ledger.load_batches(self.root),'2026-10-28');self.assertEqual('698.00',p['cashReconciliationBridge']);self.assertIsNone(p['bookCashProjection']);self.assertIsNone(p['availableCash'])
+  p=ledger.project(account(),ledger.load_batches(self.root),'2026-10-28');self.assertIsNone(p['cashReconciliationBridge']);self.assertIn('CASH_DATE_UNKNOWN',{i['code'] for i in p['cashIssues']});self.assertIsNone(p['bookCashProjection']);self.assertIsNone(p['availableCash'])
  def test_brokers_with_same_trade_id_are_isolated(self):
   self.save();self.save(self.preview(broker='银河证券'));self.assertEqual(2,len(ledger.load_batches(self.root)))
  def test_same_day_base_event_is_not_applied(self):

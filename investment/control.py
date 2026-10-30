@@ -4,6 +4,11 @@ import threading, tkinter as tk
 import json,re,subprocess
 from tkinter import ttk,messagebox
 import webbrowser
+
+def startup_analysis_allowed(root):
+ from .operations import pause_state
+ try:return not pause_state(root)['paused']
+ except (ValueError,OSError,KeyError):return False
 def private_host():
  """Read current local identity at runtime; never store it in source or logs."""
  try:
@@ -85,7 +90,7 @@ def open_control(root, port=9394):
   def desktop(): return f'http://127.0.0.1:{port}/investment/#key={server.access_key}'
   def phone(): return f'https://{phone_host}/investment/#key={server.access_key}' if phone_host else None
   ttk.Button(frame,text='打开投资分析 / 导入最新持仓',command=lambda:webbrowser.open(desktop())).pack(fill='x',ipady=7)
-  status = tk.StringVar(value='已启动。打开页面后可查看新分析；手机分享状态：'+bridge['status']+'。')
+  status = tk.StringVar(value=('分析已暂停：不会自动分析，仍可在页面手动分析。' if not startup_analysis_allowed(root) else '已启动。打开页面后可查看新分析。')+'手机分享状态：'+bridge['status']+'。')
   def copy_phone():
    if phone_host:
     # A borrowed foreground route can disappear when its original controller
@@ -107,6 +112,7 @@ def open_control(root, port=9394):
   ttk.Label(frame,textvariable=status,wraplength=590).pack(anchor='w',pady=8)
   ttk.Label(frame,text='每日任务状态请在投资页面查看；本窗口不会额外发送Bark。\n关闭窗口仅停止网页分享，后台日报任务独立运行；重启沿用原链接。',wraplength=590).pack(anchor='w',pady=8)
   def first_analysis():
+   if not startup_analysis_allowed(root):return
    # Only self-loopback: no Bark, schedule or cross-service send.
    from urllib.request import Request, build_opener, ProxyHandler
    client = build_opener(ProxyHandler({}))
@@ -114,10 +120,11 @@ def open_control(root, port=9394):
    try:
     with client.open(Request(base+'session',headers={'Authorization':'Bearer '+key}),timeout=5) as response: csrf=json.load(response)['csrf']
     headers={'Authorization':'Bearer '+key,'X-Goose-CSRF':csrf,'Origin':f'http://127.0.0.1:{port}','Content-Type':'application/json'}
-    with client.open(Request(base+'analyze',data=b'{}',headers=headers,method='POST'),timeout=5): pass
+    if startup_analysis_allowed(root):
+     with client.open(Request(base+'analyze',data=b'{}',headers=headers,method='POST'),timeout=5): pass
    except Exception: pass  # The visible refresh button remains available.
   window.protocol('WM_DELETE_WINDOW', cleanup)
-  threading.Thread(target=first_analysis,daemon=True).start()
+  if startup_analysis_allowed(root):threading.Thread(target=first_analysis,daemon=True).start()
   webbrowser.open(desktop()); window.mainloop()
  finally:
   # Covers Tk init/widget/mainloop/browser exceptions as well as normal close.

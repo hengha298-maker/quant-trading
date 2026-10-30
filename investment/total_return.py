@@ -62,6 +62,7 @@ def simulate(rows,bench,spec,events,strategy,indexes,*,mode='price',tax_bps=0,co
     cfg={**CONFIG,**(config or {})};p=EventPortfolio(cfg,spec);curve=[];orders=[];rights={};receivables={};flows=[];dividend_budget=0;gross_paid=tax_paid=0
     relative=strategy==RELATIVE
     if relative and mode!='price' and not bench.get('relativePolicy',{}).get('totalAllowed'):raise ValueError('RELATIVE_TOTAL_RETURN_COVERAGE_REQUIRED')
+    if not relative and strategy!='buy_hold' and mode!='price' and not bench.get('indicatorCoverage',{}).get('complete'):raise ValueError('SUBJECT_INDICATOR_WARMUP_COVERAGE_REQUIRED')
     causal=causal_series(rows,events)
     bm=causal_series(bench['rows'],bench['events']) if relative and mode!='price' else None
     if causal['lateAnnouncementIds'] or bm and bm['lateAnnouncementIds']:raise ValueError('TOTAL_POINT_TIME_EVENT_LATE')
@@ -140,12 +141,13 @@ def compare(dataset,benchmark,spec,doc,*,start=None,end=None,allow_synthetic=Fal
     start=start or PARTITIONS['train']['from'];end=min(end or rows[-1]['date'],rows[-1]['date']);indexes=[i for i in range(61,len(rows)) if start<=rows[i]['date']<=end]
     if not indexes:raise ValueError('TOTAL_NO_EVALUATION_SESSIONS')
     cov=proof(doc,spec['symbol'],rows[indexes[0]]['date'],rows[indexes[-1]]['date'],source_root,synthetic=synthetic)
+    indicator_cov=proof(doc,spec['symbol'],rows[indexes[0]-61]['date'],rows[indexes[-1]]['date'],source_root,synthetic=synthetic)
     relative=relative_policy(doc,spec['symbol'],benchmark['symbol'],rows[max(0,indexes[0]-61)]['date'],rows[indexes[-1]]['date'],source_root,synthetic=synthetic)
     tax=0 if spec['kind']=='etf' else 2000
     # Price mode remains available with explicitly incomplete action coverage.
     modes=['price','cash','reinvest'] if cov['complete'] else ['price']
     if cov['complete'] and tax:modes+=['cash-before-dividend-tax','reinvest-before-dividend-tax']
-    results={};bench_input={'rows':brows,'events':bevents,'dataset':benchmark,'subjectDataset':dataset,'relativePolicy':relative}
+    results={};bench_input={'rows':brows,'events':bevents,'dataset':benchmark,'subjectDataset':dataset,'relativePolicy':relative,'indicatorCoverage':indicator_cov}
     for mode in modes:
         results[mode]={}
         actual_mode=mode.split('-')[0];rate=0 if mode.endswith('before-dividend-tax') else tax
@@ -153,6 +155,8 @@ def compare(dataset,benchmark,spec,doc,*,start=None,end=None,allow_synthetic=Fal
             if strategy==RELATIVE and (spec['symbol']==benchmark['symbol'] or actual_mode!='price' and not relative['totalAllowed']):
                 reason='BENCHMARK_SELF_RELATIVE_NOT_APPLICABLE' if spec['symbol']==benchmark['symbol'] else ';'.join(relative['blockReasons'])
                 results[mode][strategy]=blocked(reason,PRICE_BASIS if actual_mode=='price' else TOTAL_BASIS);continue
+            if actual_mode!='price' and strategy!='buy_hold' and not indicator_cov['complete']:
+                results[mode][strategy]=blocked('SUBJECT_INDICATOR_WARMUP_COVERAGE_OR_HASH_INCOMPLETE','subject-causal-event-index-no-benchmark-dependency');continue
             item=simulate(rows,bench_input,spec,events,strategy,indexes,mode=actual_mode,tax_bps=rate,deadline=deadline)
             item['applicable']=not(strategy=='relative_momentum_60' and spec['symbol']==benchmark['symbol'])
             item['partitions']={}
@@ -162,6 +166,8 @@ def compare(dataset,benchmark,spec,doc,*,start=None,end=None,allow_synthetic=Fal
             results[mode][strategy]=item
     return {'format':'goose-event-return-study','version':2,'synthetic':synthetic,'symbol':spec['symbol'],'from':rows[indexes[0]]['date'],'to':rows[indexes[-1]]['date'],'modes':results,'coverage':cov,'config':CONFIG,
       'signalBasis':'relative price uses raw/raw; relative total requires symmetric verified gross event indexes; other rules retain subject-only causal indicators','usesVendorQfq':False,'pointInTimeVintageCertified':False,'universeSurvivorshipFree':False,'completeCurrentHorizon':cov['complete'],
-      'relativeMomentumPolicy':relative,'benchmarkActionCoverage':relative['benchmarkCoverage'],
+      'relativeMomentumPolicy':relative,'benchmarkActionCoverage':relative['benchmarkCoverage'],'indicatorActionCoverage':indicator_cov,
+      'indicatorCoverageMeaning':'依赖指标的含息/再投资策略要求完整61交易日预热及研究区间；买入持有仅要求账户研究区间。价格研究保留缺失证据限制，不认证完整总回报。',
+      'completeIndicatorHorizon':indicator_cov['complete'],
       'taxAssumption':('本次已核验区间的ETF现金分配按公告暂免所得税。' if spec['kind']=='etf' and cov['complete'] else '当前区间企业行为未完整核验，未输出含息结果或认证税负。' if not cov['complete'] else '股票统一预留20%仅为保守研究假设，并列0%税负对照，不是持有期差别税的真实复原。'),
       'limitations':['实际成交始终使用未复权价；因果研究指数不作为成交价格，也不再把前复权收益与现金分红相加。','股权登记日收盘确定权益；除息日确认应收，发放日收盘入现金，下个交易日才可能再投资；非券商到账证明。','留存/再投资使用同一信号和交易条件；再投资限100份/股及费用，现金不足保留，不制造小数份额。','历史行情缺少当时版本与发布时间证据，仍非严格点时认证；观察池有选择/幸存者偏差。','完整覆盖只针对明确核验的日期区间；缺失期间不补造分红、拆分或现金到账。','停牌日只作明确标记的滞后估值，不作可成交行情；含滞后标记的指标窗口暂停新信号。停牌期间发生除权而无法还原估值时阻断。']}

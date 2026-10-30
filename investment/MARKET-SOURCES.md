@@ -27,6 +27,8 @@
 
 ## 分红/复权
 
+600900原始日线逐根检查OHLC的0.01元步长，有可用同日合格报价时核对同日收盘尺度。质量元数据分别记录pricePrecisionVerified、sameDateQuoteScaleVerified及scaleCheckStatus；没有同日可比报价时尺度状态为not-available，不能称为完成尺度交叉核验。unitVerified说明已审阅字段的人民币单位/步长，不等于独立行情源认证；crossValidated仍为false。前复权研究价格不套用原始成交价的分位精度门槛。
+
 不复权回测的收益是**不含现金分红、税务及完整企业行为的价格收益**，不能当作长江电力完整投资回报。独立前复权序列已真实取得，并校验正值OHLC、排序、重复和日历，可作为除权影响/趋势的辅助上下文。它没有经逐笔分红事件、分红税和再投资对账，因此 `totalReturnVerified:false`，不能宣称已修复为完整含息回测；前复权价格绝不进入真实成交价回测。
 
 ## 公开依据及限制

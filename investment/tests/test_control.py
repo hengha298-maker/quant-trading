@@ -82,7 +82,7 @@ class FakeStatus:
 
 
 class ControlFlowTests(unittest.TestCase):
-    def exercise(self, rotation_error=False, phone_host=HOST + ":10001"):
+    def exercise(self, rotation_error=False, phone_host=HOST + ":10001", paused=False):
         buttons, protocols, clipboard = {}, {}, []
         fake_server = SimpleNamespace(access_key=OLD, serve_forever=Mock(), shutdown=Mock(), server_close=Mock())
         fake_window = Mock()
@@ -100,7 +100,8 @@ class ControlFlowTests(unittest.TestCase):
             protocols["WM_DELETE_WINDOW"]()
 
         fake_window.mainloop.side_effect = mainloop
-        with patch.object(control, "private_host", return_value=phone_host), \
+        with patch("investment.operations.pause_state",return_value={'paused':paused}), \
+                patch.object(control, "private_host", return_value=phone_host), \
                 patch.object(control.tk, "Tk", return_value=fake_window), \
                 patch.object(control.tk, "StringVar", side_effect=FakeStatus), \
                 patch.object(control.ttk, "Frame", return_value=FakeWidget()), \
@@ -142,6 +143,11 @@ class ControlFlowTests(unittest.TestCase):
         server, clipboard, *_ = self.exercise(rotation_error=True)
         self.assertEqual(OLD, server.access_key)
         self.assertEqual(clipboard[0], clipboard[1])
+
+    def test_paused_startup_serves_page_without_automatic_analysis_thread(self):
+        server,clipboard,factory,load,rotate,threads,browser=self.exercise(paused=True)
+        self.assertEqual(1,threads.call_count)
+        self.assertTrue(browser.called)
 
     def test_no_connected_private_host_does_not_make_up_phone_url(self):
         server, clipboard, *_ = self.exercise(phone_host=None)

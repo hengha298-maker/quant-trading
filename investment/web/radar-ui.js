@@ -73,6 +73,7 @@ function metricsByMode(box,study,request){
  paragraph(box,`同区间 ${study.from}—${study.to}；研究账户，与券商真实投资收益分开。`);
  if(study.synthetic)paragraph(box,'完全虚构的测试研究，不是真实证券表现。','warning');
  paragraph(box,study.taxAssumption,'footnote');
+ if(study.indicatorActionCoverage&&!study.indicatorActionCoverage.complete)paragraph(box,'指标预热期企业行为证据不完整：依赖指标的含息/再投资结果已阻断；买入持有按自身账户区间单独核验。','warning');
  const policy=study.relativeMomentumPolicy;
  if(!policy)paragraph(box,'基准口径修正前的历史旧版记录：相对动量数字不作为当前结论，原件保留；需查看新研究。','warning');
  else{
@@ -86,6 +87,7 @@ function metricsByMode(box,study,request){
   }
  }
  function resultText(name,mode,s){
+  if(s?.status==='blocked'||s?.applicable===false)return '阻断：'+(s.notApplicableReason||'证据不足');
   if(name==='relative_momentum_60'){
    if(!policy)return '旧口径，待核验';
    if(s?.applicable===false||s?.status==='blocked'||mode!=='price'&&!policy.totalAllowed)return '阻断：两侧覆盖/哈希未通过';
