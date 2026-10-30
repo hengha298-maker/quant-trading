@@ -40,7 +40,8 @@ class CorporateActionTests(unittest.TestCase):
         self.assertFalse(r['usesVendorQfq']);self.assertFalse(r['pointInTimeVintageCertified'])
         for name in r['modes']['price']:
             p=r['modes']['price'][name];c=r['modes']['cash'][name]
-            self.assertEqual([v['date'] for v in p['equityCurve']],[v['date'] for v in c['equityCurve']])
+            if c['applicable']:self.assertEqual([v['date'] for v in p['equityCurve']],[v['date'] for v in c['equityCurve']])
+            else:self.assertEqual('blocked',c['status'])
             self.assertEqual(set(p['partitions']),set(c['partitions']))
         doc['coverage']=[]
         blocked=compare(full,benchmark,SPEC,doc,allow_synthetic=True)
@@ -127,10 +128,10 @@ class CorporateActionTests(unittest.TestCase):
         aligned=valuation_rows(raw,[halt]);mark=next(r for r in aligned if r['date']==missing)
         self.assertFalse(mark['tradable']);self.assertTrue(mark['valuationCarriedForward']);self.assertEqual(0,mark['volume']);self.assertEqual(99,len(raw['bars']))
 
-    def test_late_published_benchmark_prevents_order(self):
+    def test_late_published_benchmark_does_not_block_unrelated_buy_hold(self):
         rows,e,raw,doc,b=fixture();b['rows'][60]['publishedAt']=rows[61]['date']+'T15:00:00+08:00'
         r=simulate(rows,b,SPEC,[],'buy_hold',[61],config=CFG)
-        self.assertEqual([],r['trades'])
+        self.assertEqual(1,len(r['trades']))
 
     def test_original_source_hash_required_and_cached_certificate_rechecked(self):
         from investment.trust_research import _study
@@ -144,7 +145,8 @@ class CorporateActionTests(unittest.TestCase):
             a,key=_study(root,h,bm,SPEC,doc,'2024-09-02',h['bars'][-1]['date'],None)
             self.assertTrue(a['coverage']['complete']);self.assertIn('cash',a['modes'])
             p.write_bytes(b'FICTIONAL TAMPERED DOCUMENT')
-            with self.assertRaisesRegex(ValueError,'EVIDENCE_CHANGED'):_study(root,h,bm,SPEC,doc,'2024-09-02',h['bars'][-1]['date'],None)
+            degraded,new_key=_study(root,h,bm,SPEC,doc,'2024-09-02',h['bars'][-1]['date'],None)
+            self.assertNotEqual(key,new_key);self.assertEqual({'price'},set(degraded['modes']))
             blocked=compare(h,bm,SPEC,doc,source_root=root)
             self.assertEqual({'price'},set(blocked['modes']));self.assertFalse(blocked['coverage']['complete'])
 

@@ -8,8 +8,9 @@ from .corporate_actions import catalog,evidence_status
 from .holdings import _canonical,_safe_path
 from .strategy_lab import PARTITIONS,CONFIG
 from .total_return import compare
+from .benchmark_basis import policy as relative_policy,proof
 
-REVISION=2
+REVISION=3
 
 def _trim(dataset,start,end):
     d=deepcopy(dataset);rows=d['bars'];eligible=[i for i,r in enumerate(rows) if start<=r['date']<=end]
@@ -19,19 +20,24 @@ def _trim(dataset,start,end):
 
 def _study(root,raw,benchmark,spec,doc,start,end,deadline):
     raw=_trim(raw,start,end);benchmark=_trim(benchmark,start,end)
-    key=hashlib.sha256(_canonical({'revision':REVISION,'raw':raw['bars'],'benchmark':benchmark['bars'],'spec':spec,'evidence':doc,'config':CONFIG,'partitions':PARTITIONS,'from':start,'to':end})).hexdigest()
+    first=raw['bars'][61]['date'];last=raw['bars'][-1]['date']
+    def certification():return {'portfolio':proof(doc,spec['symbol'],first,last,root),'relative':relative_policy(doc,spec['symbol'],benchmark['symbol'],raw['bars'][0]['date'],last,root)}
+    certificates=certification()
+    key=hashlib.sha256(_canonical({'revision':REVISION,'raw':raw['bars'],'benchmark':benchmark['bars'],'spec':spec,'evidence':doc,'certificates':certificates,'config':CONFIG,'partitions':PARTITIONS,'from':start,'to':end})).hexdigest()
     folder=_safe_path(Path(root)/'investment/work/radar/labs',missing=True);folder.mkdir(parents=True,exist_ok=True);path=folder/(key+'.json')
     if path.exists():
         w=json.loads(_safe_path(path,file=True).read_text(encoding='utf8'));result=w['result']
         if w['sha256']!=hashlib.sha256(_canonical(result)).hexdigest() or result.get('inputHash')!=key or result.get('synthetic'):raise ValueError('TRUST_CACHE_INTEGRITY_FAILED')
-        # A deleted/tampered evidence archive cannot stay certified via a cache.
-        state=evidence_status(doc,spec['symbol'],result['from'],result['to'],root)
-        if result['coverage']['complete'] and not state['complete']:raise ValueError('TRUST_EVIDENCE_CHANGED')
     else:
         if deadline and (deadline-datetime.now(timezone.utc)).total_seconds()<3:raise ValueError('TRUST_REPORT_TIME_RESERVED')
         with localcontext() as ctx:
             ctx.prec=45;result=compare(raw,benchmark,spec,doc,start=start,end=end,source_root=root,deadline=deadline)
         result.update(inputHash=key,modelRevision=REVISION)
+    # Source availability is part of the key: a bad benchmark creates a new
+    # degraded study, preserving the old record and the four independent rules.
+    if certification()!=certificates:raise ValueError('TRUST_EVIDENCE_CHANGED_DURING_RESEARCH')
+    if result['relativeMomentumPolicy']!=certificates['relative']:raise ValueError('TRUST_CACHE_POLICY_MISMATCH')
+    if not path.exists():
         with path.open('xb') as f:f.write(_canonical({'result':result,'sha256':hashlib.sha256(_canonical(result)).hexdigest()}))
     return result,key
 
@@ -42,7 +48,7 @@ def summarize(study,key):
         for name,s in strategies.items():
             curve=s['equityCurve'];step=max(1,len(curve)//25);preview=curve[::step]
             if curve and preview[-1]!=curve[-1]:preview.append(curve[-1])
-            modes[mode][name]={'metrics':s['metrics'],'applicable':s['applicable'],'unfilledOrders':sum(o['status']!='filled' for o in s['orders']),'cashSettledAtEnd':s['cashSettledAtEnd'],
+            modes[mode][name]={'metrics':s['metrics'],'applicable':s['applicable'],'status':s.get('status','calculated'),'signalBasis':s.get('signalBasis'),'notApplicableReason':s.get('notApplicableReason'),'unfilledOrders':sum(o['status']!='filled' for o in s['orders']),'cashSettledAtEnd':s['cashSettledAtEnd'],
               'curvePreview':[{'date':p['date'],'equity':p['equity']} for p in preview],
               'partitions':{k:({'from':p['from'],'to':p['to'],'metrics':p['metrics']} if p else None) for k,p in s['partitions'].items()}}
     result.update(modes=modes,artifactKey=key);return result

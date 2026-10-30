@@ -1,7 +1,7 @@
 {
   "format": "goose-corporate-actions",
   "version": 1,
-  "reviewedAt": "2026-10-29T16:44:53.837825+00:00",
+  "reviewedAt": "2026-10-30T01:30:00.291287+00:00",
   "sources": {
     "515450-2024-annual": {
       "url": "https://static.cninfo.com.cn/finalpage/2025-03-31/1222963588.PDF",
@@ -146,6 +146,51 @@
       "file": "600900-2025-annual.pdf",
       "archiveKind": "original-document",
       "fetchedAt": "2026-10-29T16:42:53.585181+00:00"
+    },
+    "510300-2024-annual": {
+      "url": "https://www.sse.com.cn/disclosure/fund/announcement/c/new/2025-03-31/510300_20250331_07Z1.pdf",
+      "sha256": "6eabbdbad90860c41f87dfbe5eb2402780f3d8531a49c13ef4a20ab175820b92",
+      "publicationDate": "2025-03-31",
+      "locator": "PDF pp 8-9,45,73; annual distributions and no share splits",
+      "file": "510300-2024-annual.pdf",
+      "archiveKind": "original-document",
+      "fetchedAt": "2026-10-30T01:26:06.110758+00:00"
+    },
+    "510300-2025-annual": {
+      "url": "https://www.sse.com.cn/disclosure/fund/announcement/c/new/2026-03-31/510300_20260331_W6CZ.pdf",
+      "sha256": "9790cc85c6ee6611d52e653f4154632eff35d588185d1269cadc77082f5fb4c4",
+      "publicationDate": "2026-03-31",
+      "locator": "PDF pp 8-9,45-46,76; annual distributions and no share splits",
+      "file": "510300-2025-annual.pdf",
+      "archiveKind": "original-document",
+      "fetchedAt": "2026-10-30T01:26:04.988227+00:00"
+    },
+    "510300-2024-dividend": {
+      "url": "https://www.sse.com.cn/disclosure/fund/announcement/c/new/2024-01-11/510300_20240111_QQFV.pdf",
+      "sha256": "165ddaec9b36480ff4cbc738227043db7b7acc4f80ac31bedaa0e4f5c4001f4b",
+      "publicationDate": "2024-01-11",
+      "locator": "PDF pp 1-3; notice date, record/ex/payment dates and CNY per 10 units",
+      "file": "510300-2024-dividend.pdf",
+      "archiveKind": "original-document",
+      "fetchedAt": "2026-10-30T01:26:03.172934+00:00"
+    },
+    "510300-2025-dividend": {
+      "url": "https://static.cninfo.com.cn/finalpage/2025-06-11/1223837903.PDF",
+      "sha256": "cc7d6cb4bc5c887d874db2b1a0c2d6b2fdc0c7902dcfe79d2b61564b9e2b31fc",
+      "publicationDate": "2025-06-11",
+      "locator": "PDF pp 1-3; notice date, record/ex/payment dates and CNY per 10 units",
+      "file": "510300-2025-dividend.pdf",
+      "archiveKind": "original-document",
+      "fetchedAt": "2026-10-30T01:26:03.449281+00:00"
+    },
+    "510300-2026-dividend": {
+      "url": "https://www.sse.com.cn/disclosure/fund/announcement/c/new/2026-01-12/510300_20260112_VTCZ.pdf",
+      "sha256": "c8ff747d02fa90db72320458c38249f73720b932d61b7e088f033583aab63992",
+      "publicationDate": "2026-01-12",
+      "locator": "PDF pp 1-3; notice date, record/ex/payment dates and CNY per 10 units",
+      "file": "510300-2026-dividend.pdf",
+      "archiveKind": "original-document",
+      "fetchedAt": "2026-10-30T01:26:03.100866+00:00"
     }
   },
   "events": [
@@ -308,6 +353,54 @@
       "sourceIds": [
         "600900-202501-dividend"
       ]
+    },
+    {
+      "id": "510300-2024-dividend",
+      "symbol": "510300.SH",
+      "type": "cash-dividend",
+      "status": "verified",
+      "announcementDate": "2024-01-11",
+      "availableFrom": "2024-01-12T09:30:00+08:00",
+      "recordDate": "2024-01-17",
+      "exDate": "2024-01-18",
+      "payDate": "2024-01-23",
+      "cashPerShare": "0.069",
+      "taxTreatment": "temporary income-tax exemption stated in implementation notice; not a broker receipt",
+      "sourceIds": [
+        "510300-2024-dividend"
+      ]
+    },
+    {
+      "id": "510300-2025-dividend",
+      "symbol": "510300.SH",
+      "type": "cash-dividend",
+      "status": "verified",
+      "announcementDate": "2025-06-11",
+      "availableFrom": "2025-06-12T09:30:00+08:00",
+      "recordDate": "2025-06-17",
+      "exDate": "2025-06-18",
+      "payDate": "2025-06-27",
+      "cashPerShare": "0.088",
+      "taxTreatment": "temporary income-tax exemption stated in implementation notice; not a broker receipt",
+      "sourceIds": [
+        "510300-2025-dividend"
+      ]
+    },
+    {
+      "id": "510300-2026-dividend",
+      "symbol": "510300.SH",
+      "type": "cash-dividend",
+      "status": "verified",
+      "announcementDate": "2026-01-12",
+      "availableFrom": "2026-01-13T09:30:00+08:00",
+      "recordDate": "2026-01-16",
+      "exDate": "2026-01-19",
+      "payDate": "2026-01-27",
+      "cashPerShare": "0.123",
+      "taxTreatment": "temporary income-tax exemption stated in implementation notice; not a broker receipt",
+      "sourceIds": [
+        "510300-2026-dividend"
+      ]
     }
   ],
   "coverage": [
@@ -396,6 +489,44 @@
         "paid": "23073529306.19",
         "shares": "24468217716"
       }
+    },
+    {
+      "symbol": "510300.SH",
+      "from": "2024-01-01",
+      "to": "2024-12-31",
+      "status": "reviewed-complete-interval",
+      "types": [
+        "cash-dividend",
+        "share-ratio"
+      ],
+      "eventIds": [
+        "510300-2024-dividend"
+      ],
+      "cashPerShareSum": "0.069",
+      "sourceIds": [
+        "510300-2024-dividend",
+        "510300-2024-annual"
+      ],
+      "basis": "Original implementation notice reconciles to the full annual distribution table; share-change section reports no split. Post-year audit completeness is not advance trading information."
+    },
+    {
+      "symbol": "510300.SH",
+      "from": "2025-01-01",
+      "to": "2025-12-31",
+      "status": "reviewed-complete-interval",
+      "types": [
+        "cash-dividend",
+        "share-ratio"
+      ],
+      "eventIds": [
+        "510300-2025-dividend"
+      ],
+      "cashPerShareSum": "0.088",
+      "sourceIds": [
+        "510300-2025-dividend",
+        "510300-2025-annual"
+      ],
+      "basis": "Original implementation notice reconciles to the full annual distribution table; share-change section reports no split. Post-year audit completeness is not advance trading information."
     }
   ],
   "quarantineReviews": [

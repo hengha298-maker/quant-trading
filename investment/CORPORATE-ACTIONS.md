@@ -2,6 +2,8 @@
 
 The existing dashboard keeps its original price lab and adds separate event-aware research. No broker ledger, order permission, application, notification approval or scheduled task is changed.
 
+The benchmark-basis correction is specified in [BENCHMARK-BASIS.md](BENCHMARK-BASIS.md). Old model artifacts remain historical records. Relative momentum is an explicit exception to a common signal across price/cash columns: price momentum uses raw/raw, while total-return momentum requires verified gross event indexes on both sides. Their difference includes signal/trading-path changes and must not be attributed solely to dividends.
+
 ## Reviewed evidence and bounded claims
 
 `corporate_actions.json` contains normalized public facts and document hashes, publication dates, exact source URLs and page/section locators. Original documents remain in ignored local research storage. A document archive must still match its recorded hash before a cached study can claim complete cash-flow coverage.

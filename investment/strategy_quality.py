@@ -58,11 +58,11 @@ def _assess(items,deadline=None):
         test=r['folds']['test'];validation=r['folds']['validation']
         r['statisticalScreenPassed']=bool(test and validation and all(f['excessReturnBps']>0 and all(b['sessions']>=126 and b.get('holmAdjustedP') is not None and b.get('minimumResolvableP',1)<=.05/max(1,len(comparisons)) and b['holmAdjustedP']<.05 and b['meanDailyExcess95Bps'][0]>0 for b in f['blocks']) for f in (test,validation)))
         r['limitations']=['同类ETF和股票收益相关，不能把胜出次数当作独立试验。','Holm校正重复比较；10/20日分块对依赖性作近似，不消除选择偏差或非平稳性。','p值是有限次蒙特卡洛估计，临界值附近不作稳定优势结论；置信区间是单项名义95%区间。','原始价格历史版本和证券池点时成员未认证；没有前瞻实测，因此统计筛选通过也不证明稳定优势。']
-    return {'format':'goose-strategy-quality','version':2,'status':'not-demonstrated','conclusion':'尚未证明优于买入持有','comparisons':comparisons,'winnerCountIsEvidence':False,'familySize':len(comparisons),'familyComplete':True,'prospectiveValidated':False}
+    return {'format':'goose-strategy-quality','version':3,'relativeMomentumBasis':'unadjusted-price-both-sides','status':'not-demonstrated','conclusion':'尚未证明优于买入持有','comparisons':comparisons,'winnerCountIsEvidence':False,'familySize':len(comparisons),'familyComplete':True,'prospectiveValidated':False}
 
 def assess(items,*,deadline=None,expected_family_size=None):
     planned=sum(s.get('applicable') is not False and name!='buy_hold' for item in items if item.get('study') for name,s in item['study']['modes']['price'].items())
-    blocked={'format':'goose-strategy-quality','version':2,'status':'not-demonstrated','conclusion':'尚未证明优于买入持有','comparisons':[],'familySize':planned,'familyComplete':False,'winnerCountIsEvidence':False,'prospectiveValidated':False}
+    blocked={'format':'goose-strategy-quality','version':3,'relativeMomentumBasis':'unadjusted-price-both-sides','status':'not-demonstrated','conclusion':'尚未证明优于买入持有','comparisons':[],'familySize':planned,'familyComplete':False,'winnerCountIsEvidence':False,'prospectiveValidated':False}
     if expected_family_size is not None and planned!=expected_family_size:return {**blocked,'expectedFamilySize':expected_family_size,'reason':'INCOMPLETE_RESEARCH_FAMILY_NO_PARTIAL_SIGNIFICANCE'}
     try:return _assess(items,deadline)
     except ValueError as exc:

@@ -126,6 +126,7 @@ async function main(){
     const lab=page.locator('#research-report .card').filter({hasText:'固定规则策略实验室'}).first();await lab.locator('details > summary').first().click();assert.match(await lab.innerText(),/固定规则|留出收益/);
     const labDownload=page.waitForEvent('download');await lab.getByRole('button',{name:'下载完整资金曲线、信号及成交记录'}).click();assert.ok(JSON.parse(fs.readFileSync(await (await labDownload).path(),'utf8')).result.synthetic);
     const trusted=page.locator('#research-report .card').filter({hasText:'可信回测 · 企业行为与现金分红'}).first();await trusted.locator('details > summary').first().click();await trusted.locator('summary').filter({hasText:'当前期限：因果信号与价格回测'}).click();assert.match(await trusted.innerText(),/含息留存收益/);assert.match(await trusted.innerText(),/完全虚构的测试研究/);
+    assert.match(await trusted.innerText(),/含息相对动量已阻断/);assert.match(await trusted.innerText(),/价格动量两侧均为未复权价/);
     const trustDownload=page.waitForEvent('download');await trusted.getByRole('button',{name:'下载此区间完整含息／价格研究记录'}).click();assert.ok(JSON.parse(fs.readFileSync(await (await trustDownload).path(),'utf8')).result.synthetic);
     await page.locator('[data-page="holdings"]').click();
     await page.locator('#broker').selectOption('华宝证券');
@@ -168,7 +169,7 @@ async function main(){
     await page.locator('[data-page="overview"]').click();
     const presentation=await context.request.get(base+'/investment/presentation.js');assert.equal(presentation.status(),200);
     if(round===0){
-     const artifacts=path.join(root,'investment','work','fictional-browser-artifacts');fs.mkdirSync(artifacts,{recursive:true});
+     const artifacts=path.join(root,'investment','work','fictional-browser-artifacts',String(Date.now()));fs.mkdirSync(artifacts,{recursive:true});
      await page.screenshot({path:path.join(artifacts,'mobile-390.png'),fullPage:true});
     }
    }finally{await context.close();}

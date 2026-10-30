@@ -18,7 +18,7 @@ def correlation(a,b):
 def features(history,benchmark,held_histories):
     rows=history['adjusted']['bars'];raw=history['raw']['bars'];bench=benchmark['adjusted']['bars']
     if len(rows)<126 or [r['date'] for r in rows]!=[r['date'] for r in bench] or history['raw']['quality']['status']!='validated':raise ValueError('RADAR_FEATURE_HISTORY_INSUFFICIENT')
-    signal=indicators(rows,bench,len(rows));close=D(rows[-1]['close']);ma5=sum(D(r['close']) for r in rows[-25:-5])/20
+    signal=indicators(rows,bench,len(rows));signal['relative60']=indicators(raw,benchmark['raw']['bars'],len(raw))['relative60'];close=D(rows[-1]['close']);ma5=sum(D(r['close']) for r in rows[-25:-5])/20
     peak=D(rows[-126]['close']);draw=D(0)
     for row in rows[-126:]:p=D(row['close']);peak=max(peak,p);draw=max(draw,(peak-p)/peak)
     prior_volume=sum(D(r['volume']) for r in raw[-20:-1])/19
@@ -37,7 +37,7 @@ def score(f,spec):
     parts=[]
     def add(name,maximum,earned,basis):parts.append({'factor':name,'maxPoints':maximum,'points':earned,'basis':basis})
     add('趋势',25,(10 if f['close']>f['ma20'] else 0)+(10 if f['ma20']>f['ma60'] else 0)+(5 if f['slope20']>0 else 0),f"前复权收盘{f['close']} / MA20 {f['ma20']:.6f} / MA60 {f['ma60']:.6f}；MA20五日变化{pct(f['slope20'])}%")
-    add('动量与相对强弱',20,(5 if f['momentum20']>0 else 0)+(10 if f['relative60']>0 else 0)+(5 if f['momentum120']>0 else 0),f"20日{pct(f['momentum20'])}%，120日{pct(f['momentum120'])}%，60日相对沪深300ETF价格代理{pct(f['relative60'])}%")
+    add('动量与相对强弱',20,(5 if f['momentum20']>0 else 0)+(10 if f['relative60']>0 else 0)+(5 if f['momentum120']>0 else 0),f"20日{pct(f['momentum20'])}%，120日{pct(f['momentum120'])}%，60日相对沪深300ETF两侧未复权价格动量{pct(f['relative60'])}%，不是总回报动量")
     near=f['close']/f['prior20High']-1
     add('突破位置',10,10 if near>0 else 5 if near>=D('-.02') else 0,f"相对前20日最高{pct(near)}%；当日最高窗口排除信号日，不把临近高点称已突破")
     vr=f['volumeRatio'];add('量能',10,10 if vr is not None and D('.8')<=vr<=2 else 5 if vr is not None and D('.5')<=vr<=3 else 0,f"完整日成交量 / 前19日均量 {vr:.2f}" if vr is not None else '成交量不足')

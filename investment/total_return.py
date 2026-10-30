@@ -10,6 +10,7 @@ from .corporate_actions import causal_series,valuation_rows,events_for,coverage,
 from .strategy_lab import TickPortfolio,CONFIG,PARTITIONS,STRATEGIES,indicators,decision,_measure
 from goose_research.backtest import _prepare,_cents,_available
 from .market import BJ
+from .benchmark_basis import RELATIVE,PRICE_BASIS,TOTAL_BASIS,policy as relative_policy,proof,blocked
 
 class EventPortfolio(TickPortfolio):
     def __init__(self,cfg,spec):
@@ -59,10 +60,15 @@ def _limit_reference(previous,day,events):
 def simulate(rows,bench,spec,events,strategy,indexes,*,mode='price',tax_bps=0,config=None,deadline=None):
     if mode not in {'price','cash','reinvest'} or type(tax_bps) is not int or not 0<=tax_bps<=10000:raise ValueError('TOTAL_POLICY_INVALID')
     cfg={**CONFIG,**(config or {})};p=EventPortfolio(cfg,spec);curve=[];orders=[];rights={};receivables={};flows=[];dividend_budget=0;gross_paid=tax_paid=0
-    causal=causal_series(rows,events);bm=causal_series(bench['rows'],bench['events'])
-    if causal['lateAnnouncementIds'] or bm['lateAnnouncementIds']:raise ValueError('TOTAL_POINT_TIME_EVENT_LATE')
+    relative=strategy==RELATIVE
+    if relative and mode!='price' and not bench.get('relativePolicy',{}).get('totalAllowed'):raise ValueError('RELATIVE_TOTAL_RETURN_COVERAGE_REQUIRED')
+    causal=causal_series(rows,events)
+    bm=causal_series(bench['rows'],bench['events']) if relative and mode!='price' else None
+    if causal['lateAnnouncementIds'] or bm and bm['lateAnnouncementIds']:raise ValueError('TOTAL_POINT_TIME_EVENT_LATE')
     bars,_=_prepare({**bench.get('subjectDataset',bench['dataset']),'symbol':spec['symbol'],'kind':spec['kind'],'bars':rows,'calendar':{'name':'XSHG','sessions':[r['date'] for r in rows]}})
-    benchmark_bars,_=_prepare({**bench['dataset'],'bars':bench['rows']})
+    benchmark_bars=_prepare({**bench['dataset'],'bars':bench['rows']})[0] if relative else None
+    indicator_rows=rows if relative and mode=='price' else causal['bars']
+    indicator_benchmark=(bench['rows'] if mode=='price' else bm['bars']) if relative else indicator_rows
     for i in indexes:
         if deadline and datetime.now(timezone.utc)>=deadline:raise ValueError('TOTAL_RESEARCH_BUDGET_EXHAUSTED')
         bar=bars[i];day=bar.date
@@ -77,9 +83,9 @@ def simulate(rows,bench,spec,events,strategy,indexes,*,mode='price',tax_bps=0,co
                 receivables[e['id']]={'net':gross-tax,'gross':gross,'tax':tax,'payDate':e['payDate']}
                 flows.append({'eventId':e['id'],'date':day,'kind':'dividend-entitlement','quantity':qty,'gross':str(gross),'taxAssumption':str(tax),'receivable':str(gross-tax)})
         opening=p.cash+_cents(bar.open*p.quantity*100)+sum(r['net'] for r in receivables.values())
-        signal=indicators(causal['bars'],bm['bars'],i);side=decision(strategy,signal,spec['kind'])
-        if not all(_available(bars[j],day) and _available(benchmark_bars[j],day) for j in range(i-61,i)):side='HOLD'
-        if any(rows[j].get('valuationCarriedForward') or bench['rows'][j].get('valuationCarriedForward') for j in range(i-61,i)):side='HOLD'
+        signal=indicators(indicator_rows,indicator_benchmark,i);side=decision(strategy,signal,spec['kind'])
+        if not all(_available(bars[j],day) and (not relative or _available(benchmark_bars[j],day)) for j in range(i-61,i)):side='HOLD'
+        if any(rows[j].get('valuationCarriedForward') or relative and bench['rows'][j].get('valuationCarriedForward') for j in range(i-61,i)):side='HOLD'
         if side=='BUY' and p.quantity or side=='SELL' and not p.quantity:side='HOLD'
         reinvesting=mode=='reinvest' and p.quantity>0 and dividend_budget>0 and side!='SELL'
         if reinvesting:side='BUY'
@@ -119,7 +125,8 @@ def simulate(rows,bench,spec,events,strategy,indexes,*,mode='price',tax_bps=0,co
           oneWayTurnoverPct=pct(sum((D(t['gross']) for t in p.trades),D(0))/avg) if avg else None,
           dividendGrossPaid=str(gross_paid),dividendTaxAssumed=str(tax_paid),dividendNetPaid=str(gross_paid-tax_paid),dividendReceivable=curve[-1]['dividendReceivable'],
           totalReturnIncludesExternalFunding=False,riskFreeRateAssumption='0% annual; 252-session risk scaling',annualizationSuppressed=m['annualizedReturnBps'] is None)
-    return {'metrics':m,'equityCurve':curve,'trades':p.trades,'orders':orders,'eventCashFlows':flows,'mode':mode,'dividendTaxBpsAssumption':tax_bps,'cashSettledAtEnd':not receivables,'usesBrokerAccount':False}
+    return {'metrics':m,'equityCurve':curve,'trades':p.trades,'orders':orders,'eventCashFlows':flows,'mode':mode,'dividendTaxBpsAssumption':tax_bps,'cashSettledAtEnd':not receivables,'usesBrokerAccount':False,
+      'signalBasis':PRICE_BASIS if relative and mode=='price' else TOTAL_BASIS if relative else 'subject-causal-event-index-no-benchmark-dependency'}
 
 def compare(dataset,benchmark,spec,doc,*,start=None,end=None,allow_synthetic=False,source_root=None,deadline=None):
     synthetic=dataset['quality']['status']=='synthetic' or benchmark['quality']['status']=='synthetic'
@@ -132,20 +139,20 @@ def compare(dataset,benchmark,spec,doc,*,start=None,end=None,allow_synthetic=Fal
     _prepare({**dataset,'bars':rows,'calendar':{'name':'XSHG','sessions':[r['date'] for r in rows]}});_prepare({**benchmark,'bars':brows,'calendar':{'name':'XSHG','sessions':[r['date'] for r in brows]}})
     start=start or PARTITIONS['train']['from'];end=min(end or rows[-1]['date'],rows[-1]['date']);indexes=[i for i in range(61,len(rows)) if start<=rows[i]['date']<=end]
     if not indexes:raise ValueError('TOTAL_NO_EVALUATION_SESSIONS')
-    cov=coverage(doc,spec['symbol'],rows[indexes[0]]['date'],rows[indexes[-1]]['date'])
-    if not synthetic:
-        from pathlib import Path
-        status=evidence_status(doc,spec['symbol'],rows[indexes[0]]['date'],rows[indexes[-1]]['date'],source_root or Path(__file__).resolve().parents[1])
-        if not status['sourceFilesVerified']:cov['complete']=False;cov['missingSourceIds']=status['missingSourceIds']
+    cov=proof(doc,spec['symbol'],rows[indexes[0]]['date'],rows[indexes[-1]]['date'],source_root,synthetic=synthetic)
+    relative=relative_policy(doc,spec['symbol'],benchmark['symbol'],rows[max(0,indexes[0]-61)]['date'],rows[indexes[-1]]['date'],source_root,synthetic=synthetic)
     tax=0 if spec['kind']=='etf' else 2000
     # Price mode remains available with explicitly incomplete action coverage.
     modes=['price','cash','reinvest'] if cov['complete'] else ['price']
     if cov['complete'] and tax:modes+=['cash-before-dividend-tax','reinvest-before-dividend-tax']
-    results={};bench_input={'rows':brows,'events':bevents,'dataset':benchmark,'subjectDataset':dataset}
+    results={};bench_input={'rows':brows,'events':bevents,'dataset':benchmark,'subjectDataset':dataset,'relativePolicy':relative}
     for mode in modes:
         results[mode]={}
         actual_mode=mode.split('-')[0];rate=0 if mode.endswith('before-dividend-tax') else tax
         for strategy in STRATEGIES:
+            if strategy==RELATIVE and (spec['symbol']==benchmark['symbol'] or actual_mode!='price' and not relative['totalAllowed']):
+                reason='BENCHMARK_SELF_RELATIVE_NOT_APPLICABLE' if spec['symbol']==benchmark['symbol'] else ';'.join(relative['blockReasons'])
+                results[mode][strategy]=blocked(reason,PRICE_BASIS if actual_mode=='price' else TOTAL_BASIS);continue
             item=simulate(rows,bench_input,spec,events,strategy,indexes,mode=actual_mode,tax_bps=rate,deadline=deadline)
             item['applicable']=not(strategy=='relative_momentum_60' and spec['symbol']==benchmark['symbol'])
             item['partitions']={}
@@ -153,8 +160,8 @@ def compare(dataset,benchmark,spec,doc,*,start=None,end=None,allow_synthetic=Fal
                 ix=[i for i in indexes if span['from']<=rows[i]['date']<=span['to']]
                 item['partitions'][key]={'from':rows[ix[0]]['date'],'to':rows[ix[-1]]['date'],**simulate(rows,bench_input,spec,events,strategy,ix,mode=actual_mode,tax_bps=rate,deadline=deadline)} if ix else None
             results[mode][strategy]=item
-    return {'format':'goose-event-return-study','version':1,'synthetic':synthetic,'symbol':spec['symbol'],'from':rows[indexes[0]]['date'],'to':rows[indexes[-1]]['date'],'modes':results,'coverage':cov,'config':CONFIG,
-      'signalBasis':'causal-forward-event-index; raw published times assumed next session where absent','usesVendorQfq':False,'pointInTimeVintageCertified':False,'universeSurvivorshipFree':False,'completeCurrentHorizon':cov['complete'],
-      'benchmarkActionCoverage':coverage(doc,benchmark['symbol'],rows[max(0,indexes[0]-61)]['date'],rows[indexes[-1]]['date']),
+    return {'format':'goose-event-return-study','version':2,'synthetic':synthetic,'symbol':spec['symbol'],'from':rows[indexes[0]]['date'],'to':rows[indexes[-1]]['date'],'modes':results,'coverage':cov,'config':CONFIG,
+      'signalBasis':'relative price uses raw/raw; relative total requires symmetric verified gross event indexes; other rules retain subject-only causal indicators','usesVendorQfq':False,'pointInTimeVintageCertified':False,'universeSurvivorshipFree':False,'completeCurrentHorizon':cov['complete'],
+      'relativeMomentumPolicy':relative,'benchmarkActionCoverage':relative['benchmarkCoverage'],
       'taxAssumption':('本次已核验区间的ETF现金分配按公告暂免所得税。' if spec['kind']=='etf' and cov['complete'] else '当前区间企业行为未完整核验，未输出含息结果或认证税负。' if not cov['complete'] else '股票统一预留20%仅为保守研究假设，并列0%税负对照，不是持有期差别税的真实复原。'),
       'limitations':['实际成交始终使用未复权价；因果研究指数不作为成交价格，也不再把前复权收益与现金分红相加。','股权登记日收盘确定权益；除息日确认应收，发放日收盘入现金，下个交易日才可能再投资；非券商到账证明。','留存/再投资使用同一信号和交易条件；再投资限100份/股及费用，现金不足保留，不制造小数份额。','历史行情缺少当时版本与发布时间证据，仍非严格点时认证；观察池有选择/幸存者偏差。','完整覆盖只针对明确核验的日期区间；缺失期间不补造分红、拆分或现金到账。','停牌日只作明确标记的滞后估值，不作可成交行情；含滞后标记的指标窗口暂停新信号。停牌期间发生除权而无法还原估值时阻断。']}

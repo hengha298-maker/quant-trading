@@ -84,9 +84,11 @@ def coverage(doc,symbol,start,end):
     incomplete.extend(e['id'] for e in doc['events'] if e['symbol']==symbol and e['type']!='suspension' and start<=e['exDate']<=end and e['status']!='verified')
     return {'complete':not gaps and not incomplete,'from':start,'to':end,'missingIntervals':gaps,'incompleteEventIds':incomplete,'verifiedEvents':len(relevant)}
 
-def evidence_status(doc,symbol,start,end,root=None):
+def evidence_status(doc,symbol,start,end,root=None,*,scope_to_interval=False):
     result=coverage(doc,symbol,start,end);events=events_for(doc,symbol)
-    ids={s for e in events for s in e['sourceIds']}|{s for c in doc['coverage'] if c['symbol']==symbol for s in c['sourceIds']}
+    if scope_to_interval:
+        events=[e for e in events if (e['startDate']<=end and e['endDate']>=start if e['type']=='suspension' else start<=e['exDate']<=end)]
+    ids={s for e in events for s in e['sourceIds']}|{s for c in doc['coverage'] if c['symbol']==symbol and (not scope_to_interval or c['from']<=end and c['to']>=start) for s in c['sourceIds']}
     missing=[]
     if root is not None:
         folder=Path(root)/'investment/work/corporate-actions/official'
