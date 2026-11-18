@@ -1,0 +1,26 @@
+name: Public market and entry diagnostics
+on:
+  push:
+    branches: [codex/goose-linux-offline-ebde92f-20261118]
+    paths: [verification/cloud_probe.py, .github/workflows/public-network.yml]
+permissions:
+  contents: read
+jobs:
+  bounded-public-diagnostics:
+    if: github.event.repository.private == false
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      PYTHONUTF8: '1'
+      TZ: Asia/Shanghai
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install --disable-pip-version-check --require-hashes -r deployment/runner-requirements-linux.lock
+      - run: python -B verification/cloud_probe.py

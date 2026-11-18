@@ -2,6 +2,7 @@ name: Offline Linux engine validation
 on:
   push:
     branches: [codex/goose-linux-offline-ebde92f-20261118]
+    paths: [investment/**, v32/**, v33/**, deployment/**, verification/linux_test.py]
 permissions:
   contents: read
 jobs:
