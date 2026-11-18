@@ -1,0 +1,2 @@
+CREATE TABLE IF NOT EXISTS cloud_scan_plan(day TEXT PRIMARY KEY, jobs TEXT NOT NULL, created_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS cloud_scan_pages(day TEXT NOT NULL, kind TEXT NOT NULL, page INTEGER NOT NULL, status TEXT NOT NULL, body TEXT NOT NULL, PRIMARY KEY(day,kind,page));

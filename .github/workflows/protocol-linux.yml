@@ -1,0 +1,24 @@
+name: Isolated Linux D1 protocol
+on:
+  push:
+    branches: [codex/goose-linux-offline-ebde92f-20261118]
+    paths: [verification/worker/**, .github/workflows/protocol-linux.yml]
+permissions:
+  contents: read
+jobs:
+  isolated-protocol:
+    if: github.event.repository.private == false
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+        working-directory: verification/worker
+      - run: npm test
+        working-directory: verification/worker

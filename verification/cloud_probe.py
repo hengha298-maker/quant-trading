@@ -10,7 +10,7 @@ from html.parser import HTMLParser
 from unittest.mock import patch
 ROOT=Path(__file__).resolve().parents[1]
 for p in (ROOT,ROOT/'v32',ROOT/'v33'):sys.path.insert(0,str(p))
-from investment import market,engine,radar_market,holdings
+from investment import market,engine,radar_market,holdings,v2_history
 SYMBOLS=['600900.SH','515450.SH']
 class Redirects(HTTPRedirectHandler):
  def redirect_request(self,req,fp,code,msg,headers,newurl):
@@ -76,7 +76,12 @@ def research(data,root,now):
  def labelled_write(path,value):
   if Path(path).name=='report.json':value['accountMode']='fictional-engineering-account'
   return original_write(path,value)
- with patch('investment.engine.build_analysis',side_effect=labelled_build),patch('investment.engine.write_json',side_effect=labelled_write),patch('investment.market.collect_market',return_value=data),patch('investment.market.collect_quotes',return_value={'quotes':data['quotes'],'diagnostics':data['diagnostics']}),patch('investment.radar.collect',return_value=radar),patch('urllib.request.OpenerDirector.open',side_effect=no_network),patch('socket.socket.connect',side_effect=no_network),patch('investment.delivery.send_daily',side_effect=no_network):
+ original_history=v2_history.build
+ def isolated_history(report,root,**kwargs):
+  # Keep the production synthetic-source rejection intact. This fixture computes
+  # history views without requesting authoritative history persistence.
+  return original_history(report,root,persist=False)
+ with patch('investment.v2_history.build',side_effect=isolated_history),patch('investment.engine.build_analysis',side_effect=labelled_build),patch('investment.engine.write_json',side_effect=labelled_write),patch('investment.market.collect_market',return_value=data),patch('investment.market.collect_quotes',return_value={'quotes':data['quotes'],'diagnostics':data['diagnostics']}),patch('investment.radar.collect',return_value=radar),patch('urllib.request.OpenerDirector.open',side_effect=no_network),patch('socket.socket.connect',side_effect=no_network),patch('investment.delivery.send_daily',side_effect=no_network):
   result=engine.run_analysis(root,deadline=datetime.now(timezone.utc)+timedelta(seconds=100))
  paths=list((root/'investment/work/runs').glob('*/report.json'));assert len(paths)==1
  raw=paths[0].read_bytes();saved=json.loads(raw);assert json.dumps(saved,sort_keys=True)==json.dumps(result,sort_keys=True) and saved['realOrdersEnabled'] is False and saved['notificationSent'] is False
@@ -99,7 +104,8 @@ def main():
    try:summary['research']=research(data,root,now)
    except Exception as e:summary['research']={'status':'failed','failureType':type(e).__name__,'code':str(e) if re.fullmatch('[A-Z0-9_]{1,100}',str(e)) else 'ENGINE_VALIDATION_FAILED'}
   except Exception as e:summary.update(providers=attempts,market={'status':'failed','failureType':type(e).__name__,'code':str(e) if re.fullmatch('[A-Z0-9_]{1,100}',str(e)) else 'COLLECTION_FAILED'})
- with ThreadPoolExecutor(max_workers=2) as pool:summary['entries']=list(pool.map(entry,['goose-private-report.nvestment-dev.workers.dev','goose-investment-nvestment.pages.dev']))
+ if '--research-only' not in sys.argv:
+  with ThreadPoolExecutor(max_workers=2) as pool:summary['entries']=list(pool.map(entry,['goose-private-report.nvestment-dev.workers.dev','goose-investment-nvestment.pages.dev']))
  import resource
  summary['peakRssKiB']=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
  summary['elapsedSeconds']=round(time.monotonic()-started,3)
