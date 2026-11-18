@@ -10,3 +10,4 @@ Targeted correction after first run: the collector rejected the separate cloud t
 
 Task-2 fixture correction: retain testData marker and production V2 rejection; compute synthetic history views with persist=False. Saved engine report remains real-public-market / fictional-account only. Do not repeat successful entry probes.
 Linux D1 verification copies existing candidate protocol and seven migrations verbatim, changing only the local runtime import in the nine existing tests. No production binding, secret, schedule or deployment configuration is included.
+Protocol retest: seven checks passed on Linux; the rejected-future-report fixture used 2026-11-19 which became today in Asia/Shanghai. Replace that test input with relative tomorrow, preserving the production provenance rule and all assertions. The dependent ninth test failed only because the eighth stopped early.
