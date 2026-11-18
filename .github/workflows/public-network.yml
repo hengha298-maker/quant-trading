@@ -23,4 +23,5 @@ jobs:
         with:
           python-version: '3.12'
       - run: python -m pip install --disable-pip-version-check --require-hashes -r deployment/runner-requirements-linux.lock
+      - run: python -B -m unittest discover -s verification -p test_cloud_paths.py -v
       - run: python -B verification/cloud_probe.py

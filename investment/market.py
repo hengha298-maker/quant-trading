@@ -481,7 +481,31 @@ def _dataset(symbol, bars, start, end, observation, quote):
     return validate_dataset(doc)
 
 
-def collect_market(symbols, output_dir, *, now=None, history_days=320, deadline=None, _quotes_only=False):
+def _output_location(output_dir, data_root=None):
+    """Allow only an explicit private data root and its investment/work child."""
+    root = Path(os.path.abspath(data_root if data_root is not None else ROOT))
+    if ".." in Path(data_root if data_root is not None else ROOT).parts:
+        _fail("MARKET_DATA_ROOT_PARENT_TRAVERSAL_FORBIDDEN")
+    if any(part.lower() in {"public", "dist", "assets", "static", "build"} for part in root.parts):
+        _fail("MARKET_DATA_ROOT_PUBLICATION_DIRECTORY_FORBIDDEN")
+    target = Path(os.path.abspath(output_dir))
+    if ".." in Path(output_dir).parts:
+        _fail("MARKET_OUTPUT_PARENT_TRAVERSAL_FORBIDDEN")
+    for parent in (target, *target.parents, root, *root.parents):
+        try:
+            stat = parent.lstat()
+        except FileNotFoundError:
+            continue
+        if parent.is_symlink() or getattr(stat, "st_file_attributes", 0) & 0x400:
+            _fail("MARKET_OUTPUT_REPARSE_POINT_FORBIDDEN")
+    if not root.is_dir():
+        _fail("MARKET_EXPLICIT_DATA_ROOT_MUST_EXIST")
+    if not target.resolve().is_relative_to(root.resolve() / "investment" / "work"):
+        _fail("MARKET_OUTPUT_REQUIRES_PROJECT_IGNORED_WORK_DIRECTORY")
+    return target
+
+
+def collect_market(symbols, output_dir, *, now=None, history_days=320, deadline=None, _quotes_only=False, data_root=None):
     """Collect live public responses; output_dir MUST be a local ignored work dir.
 
     Known instruments are reviewed explicitly. Unknown user instruments return
@@ -498,20 +522,7 @@ def collect_market(symbols, output_dir, *, now=None, history_days=320, deadline=
     symbols = list(dict.fromkeys(symbols))
     if len(symbols) > 20:
         _fail("SYMBOL_LIMIT_EXCEEDED")
-    # Inspect the original absolute spelling before resolve() can hide a link.
-    target = Path(os.path.abspath(output_dir))
-    if ".." in Path(output_dir).parts:
-        _fail("MARKET_OUTPUT_PARENT_TRAVERSAL_FORBIDDEN")
-    for parent in (target, *target.parents):
-        try:
-            stat = parent.lstat()
-        except FileNotFoundError:
-            continue
-        if parent.is_symlink() or getattr(stat, "st_file_attributes", 0) & 0x400:
-            _fail("MARKET_OUTPUT_REPARSE_POINT_FORBIDDEN")
-    resolved = target.resolve()
-    if not resolved.is_relative_to(ROOT) or "work" not in resolved.relative_to(ROOT).parts:
-        _fail("MARKET_OUTPUT_REQUIRES_PROJECT_IGNORED_WORK_DIRECTORY")
+    target = _output_location(output_dir, data_root)
     target.mkdir(parents=True, exist_ok=True)
     result = {"format": "goose-investment-market", "version": 1, "generatedAt": now.isoformat(),
         "context": {"localDate": now.astimezone(BJ).date().isoformat(), "independentFeedsVerified": False,
@@ -619,7 +630,7 @@ def collect_market(symbols, output_dir, *, now=None, history_days=320, deadline=
     return result
 
 
-def collect_quotes(symbols, output_dir, *, now=None, deadline=None):
+def collect_quotes(symbols, output_dir, *, now=None, deadline=None, data_root=None):
     """Refresh only reviewed holding quotes before an immutable report is sealed.
 
     Two held symbols produce four bounded public requests. No histories or
@@ -627,4 +638,4 @@ def collect_quotes(symbols, output_dir, *, now=None, deadline=None):
     collection-time audits are retained in a distinct quotes.json artifact.
     The full collector's original identity/unit/time/conflict rules are reused.
     """
-    return collect_market(symbols, output_dir, now=now, deadline=deadline, _quotes_only=True)
+    return collect_market(symbols, output_dir, now=now, deadline=deadline, _quotes_only=True, data_root=data_root)

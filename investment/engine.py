@@ -148,7 +148,7 @@ def run_analysis(root=None, *, deadline=None):
   folder=w/'runs'/(datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')+'-'+uuid.uuid4().hex[:8]);folder.mkdir(parents=True,exist_ok=False)
   start_evidence=account_evidence_digest(root or ROOT)
   holdings=latest_holdings(root);symbols=list(dict.fromkeys(DEFAULT_SYMBOLS+[p['symbol'] for p in (holdings or {}).get('positions',[])]))
-  try:market=collect_market(symbols,folder/'market',deadline=deadline)
+  try:market=collect_market(symbols,folder/'market',deadline=deadline,data_root=root or ROOT)
   except (ValueError,OSError):market={'quotes':{},'histories':{},'diagnostics':[{'errors':['MARKET_COLLECTION_FAILED_NO_OLD_SIGNAL_REUSE']} ]}
   report=build_analysis(market,holdings)
   from .ledger import account_views
@@ -180,7 +180,7 @@ def run_analysis(root=None, *, deadline=None):
   if deadline is None or (deadline-datetime.now(timezone.utc)).total_seconds()>12:
    from .market import collect_quotes
    try:
-    tail=collect_quotes(symbols,folder/'quotes-final',deadline=deadline)
+    tail=collect_quotes(symbols,folder/'quotes-final',deadline=deadline,data_root=root or ROOT)
     market['quotes']=tail['quotes'];market['diagnostics']=[*market.get('diagnostics',[]),*tail.get('diagnostics',[])]
     updated=build_analysis(market,holdings)
     for key in ['dataMode','generatedAt','asOf','status','summary','portfolio','instruments','diagnostics','marketContext']:report[key]=updated[key]

@@ -54,15 +54,15 @@ def entry(host):
  if chrome:
   try:
    with tempfile.TemporaryDirectory(prefix='goose-entry-browser-') as profile:
-    r=subprocess.run([chrome,'--headless','--no-sandbox','--disable-gpu','--disable-dev-shm-usage','--user-data-dir='+profile,'--dump-dom',origin+'/investment/'],capture_output=True,timeout=22)
+    r=subprocess.run([chrome,'--headless','--no-sandbox','--disable-gpu','--disable-dev-shm-usage','--user-data-dir='+profile,'--timeout=10000','--virtual-time-budget=3000','--no-first-run','--dump-dom',origin+'/investment/'],capture_output=True,timeout=18)
     html=r.stdout.decode('utf8',errors='replace');out['browser']={'exitCode':r.returncode,'htmlRendered':'<html' in html,'passwordInputRendered':bool(re.search(r'<input[^>]+type="password"',html)),'domBytes':len(r.stdout),'isAuthenticatedApp':False}
   except Exception as e:out['browser']={'failureType':type(e).__name__}
  else:out['browser']={'status':'browser-not-installed'}
  return out
 
 def research(data,root,now):
- if not data.get('histories'):return {'status':'blocked','reason':'NO_VALIDATED_REAL_HISTORY','reportGenerated':False}
- cat=radar_market.catalog();histories={s:{'raw':v,'adjusted':data['adjustedHistories'][s]} for s,v in data['histories'].items() if s in data['adjustedHistories']}
+ if not any(data.get('histories',{}).values()):return {'status':'blocked','reason':'NO_VALIDATED_REAL_HISTORY','reportGenerated':False}
+ cat=radar_market.catalog();histories={s:{'raw':v,'adjusted':data['adjustedHistories'][s]} for s,v in data['histories'].items() if v and data['adjustedHistories'].get(s)}
  quality={x['symbol']:{'status':'partial-sample-only','codes':['BOUNDED_TWO_SECURITY_TEST'],'quote':data['quotes'].get(x['symbol'])} for x in cat['instruments']}
  radar={'catalog':cat,'through':radar_market.complete_session(now),'synthetic':False,'histories':histories,'quality':quality}
  for s,b,q in [(SYMBOLS[0],'华宝证券',100),(SYMBOLS[1],'银河证券',200)]:
@@ -70,7 +70,13 @@ def research(data,root,now):
   holdings.commit_preview(preview,root/'investment/work/private/holdings',confirmed=True)
  def no_network(*a,**k):raise AssertionError('NO_ADDITIONAL_ENGINE_NETWORK_OR_BARK_ALLOWED')
  started=time.monotonic()
- with patch('investment.market.collect_market',return_value=data),patch('investment.market.collect_quotes',return_value={'quotes':data['quotes'],'diagnostics':data['diagnostics']}),patch('investment.radar.collect',return_value=radar),patch('urllib.request.OpenerDirector.open',side_effect=no_network),patch('socket.socket.connect',side_effect=no_network),patch('investment.delivery.send_daily',side_effect=no_network):
+ original_build,original_write=engine.build_analysis,engine.write_json
+ def labelled_build(*a,**k):
+  value=original_build(*a,**k);value['testData']=True;value['validationScope']={'accountType':'fictional','marketData':'real-public-provider','scope':'two-security-compatibility-only'};return value
+ def labelled_write(path,value):
+  if Path(path).name=='report.json':value['accountMode']='fictional-engineering-account'
+  return original_write(path,value)
+ with patch('investment.engine.build_analysis',side_effect=labelled_build),patch('investment.engine.write_json',side_effect=labelled_write),patch('investment.market.collect_market',return_value=data),patch('investment.market.collect_quotes',return_value={'quotes':data['quotes'],'diagnostics':data['diagnostics']}),patch('investment.radar.collect',return_value=radar),patch('urllib.request.OpenerDirector.open',side_effect=no_network),patch('socket.socket.connect',side_effect=no_network),patch('investment.delivery.send_daily',side_effect=no_network):
   result=engine.run_analysis(root,deadline=datetime.now(timezone.utc)+timedelta(seconds=100))
  paths=list((root/'investment/work/runs').glob('*/report.json'));assert len(paths)==1
  raw=paths[0].read_bytes();saved=json.loads(raw);assert json.dumps(saved,sort_keys=True)==json.dumps(result,sort_keys=True) and saved['realOrdersEnabled'] is False and saved['notificationSent'] is False
@@ -88,12 +94,14 @@ def main():
  with tempfile.TemporaryDirectory(prefix='goose-public-real-market-') as directory:
   root=Path(directory)
   try:
-   with patch('investment.market._attempt',side_effect=bounded):data=market.collect_market(SYMBOLS,root/'collection',history_days=260,deadline=now+timedelta(seconds=150))
-   summary['providers']=attempts;summary['market']={'historySymbols':list(data['histories']),'adjustedHistorySymbols':list(data['adjustedHistories']),'quotes':{s:{'source':q['source'],'sourceTimestamp':q['sourceTimestamp'],'fetchedAt':q['fetchedAt'],'quality':q['quality'],'adjustment':q['adjustment']} for s,q in data['quotes'].items()},'barCounts':{s:len(h['bars']) for s,h in data['histories'].items()}}
+   with patch('investment.market._attempt',side_effect=bounded):data=market.collect_market(SYMBOLS,root/'investment/work/collection',history_days=260,deadline=now+timedelta(seconds=150),data_root=root)
+   summary['providers']=attempts;summary['market']={'historySymbols':[s for s,h in data['histories'].items() if h],'adjustedHistorySymbols':[s for s,h in data['adjustedHistories'].items() if h],'quotes':{s:{'source':q['source'],'sourceTimestamp':q['sourceTimestamp'],'fetchedAt':q['fetchedAt'],'quality':q['quality'],'adjustment':q['adjustment']} for s,q in data['quotes'].items() if q},'barCounts':{s:len(h['bars']) for s,h in data['histories'].items() if h}}
    try:summary['research']=research(data,root,now)
    except Exception as e:summary['research']={'status':'failed','failureType':type(e).__name__,'code':str(e) if re.fullmatch('[A-Z0-9_]{1,100}',str(e)) else 'ENGINE_VALIDATION_FAILED'}
-  except Exception as e:summary.update(providers=attempts,market={'status':'failed','failureType':type(e).__name__})
+  except Exception as e:summary.update(providers=attempts,market={'status':'failed','failureType':type(e).__name__,'code':str(e) if re.fullmatch('[A-Z0-9_]{1,100}',str(e)) else 'COLLECTION_FAILED'})
  with ThreadPoolExecutor(max_workers=2) as pool:summary['entries']=list(pool.map(entry,['goose-private-report.nvestment-dev.workers.dev','goose-investment-nvestment.pages.dev']))
+ import resource
+ summary['peakRssKiB']=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
  summary['elapsedSeconds']=round(time.monotonic()-started,3)
  summary['status']='passed-historical-sample-validation' if summary.get('research',{}).get('status')=='passed' and len(summary.get('market',{}).get('historySymbols',[]))==2 else 'completed-with-market-blockers'
  print('GOOSE_VALIDATION_RESULT='+json.dumps(summary,ensure_ascii=True,separators=(',',':')))
