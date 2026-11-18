@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "reviewedOn": "2026-10-29",
+  "selection": "Manually reviewed representative research pool; not all-market coverage or historical index membership",
+  "benchmark": "510300.SH",
+  "identitySources": [
+    "https://english.sse.com.cn/markets/funds/fundlist/",
+    "https://www.sse.com.cn/lawandrules/sselawsrules2025/trade/specific/margin/c/c_20261016_10834885.shtml",
+    "https://star.sse.com.cn/aboutus/publication/monthly/company/",
+    "https://www.sse.com.cn/assortment/stock/areatrade/area/detail.shtml?eqid=e272d792000000ef00000004642e7fd7"
+  ],
+  "unitSource": "https://www.sse.com.cn/assortment/fund/etf/question/c/c_20240118_5734754.shtml",
+  "instruments": [
+    {"symbol":"510050.SH","name":"上证50ETF华夏","kind":"etf","category":"宽基大盘","aliases":["上证50ETF华夏","50ETF","上证50ETF"],"tick":"0.001","limitBps":1000},
+    {"symbol":"510300.SH","name":"沪深300ETF华泰柏瑞","kind":"etf","category":"宽基大盘","aliases":["沪深300ETF华泰柏瑞","300ETF","沪深300ETF"],"tick":"0.001","limitBps":1000},
+    {"symbol":"510500.SH","name":"中证500ETF南方","kind":"etf","category":"宽基中盘","aliases":["中证500ETF南方","500ETF","中证500ETF"],"tick":"0.001","limitBps":1000},
+    {"symbol":"512100.SH","name":"中证1000ETF南方","kind":"etf","category":"宽基小盘","aliases":["中证1000ETF南方","1000ETF","中证1000ETF"],"tick":"0.001","limitBps":1000},
+    {"symbol":"510880.SH","name":"红利ETF华泰柏瑞","kind":"etf","category":"红利","aliases":["红利ETF华泰柏瑞","红利ETF"],"tick":"0.001","limitBps":1000},
+    {"symbol":"515450.SH","name":"红利低波50ETF南方","kind":"etf","category":"红利低波","aliases":["红利低波50ETF南方","红利低波50ETF","红利50"],"tick":"0.001","limitBps":1000,"identitySource":"https://www.sse.com.cn/disclosure/fund/announcement/c/new/2023-04-22/515450_20230422_K7UP.pdf"},
+    {"symbol":"512890.SH","name":"红利低波ETF华泰柏瑞","kind":"etf","category":"红利低波","aliases":["红利低波ETF华泰柏瑞","红利低波","红利低波ETF"],"tick":"0.001","limitBps":1000},
+    {"symbol":"512800.SH","name":"银行ETF华宝","kind":"etf","category":"银行行业","aliases":["银行ETF华宝","银行ETF"],"tick":"0.001","limitBps":1000},
+    {"symbol":"512480.SH","name":"半导体ETF国联安","kind":"etf","category":"半导体行业","aliases":["半导体ETF国联安","半导体","半导体ETF"],"tick":"0.001","limitBps":1000},
+    {"symbol":"512660.SH","name":"军工ETF国泰","kind":"etf","category":"军工行业","aliases":["军工ETF国泰","军工ETF"],"tick":"0.001","limitBps":1000},
+    {"symbol":"600036.SH","name":"招商银行","kind":"stock","category":"银行","aliases":["招商银行"],"tick":"0.01","limitBps":1000},
+    {"symbol":"600519.SH","name":"贵州茅台","kind":"stock","category":"消费","aliases":["贵州茅台"],"tick":"0.01","limitBps":1000},
+    {"symbol":"600900.SH","name":"长江电力","kind":"stock","category":"公用事业","aliases":["长江电力"],"tick":"0.01","limitBps":1000},
+    {"symbol":"601318.SH","name":"中国平安","kind":"stock","category":"保险","aliases":["中国平安"],"tick":"0.01","limitBps":1000},
+    {"symbol":"601088.SH","name":"中国神华","kind":"stock","category":"能源","aliases":["中国神华"],"tick":"0.01","limitBps":1000},
+    {"symbol":"600030.SH","name":"中信证券","kind":"stock","category":"证券","aliases":["中信证券"],"tick":"0.01","limitBps":1000}
+  ]
+}

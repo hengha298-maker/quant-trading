@@ -1,0 +1,26 @@
+name: Offline Linux engine validation
+on:
+  push:
+    branches: [codex/goose-linux-offline-ebde92f-20261118]
+permissions:
+  contents: read
+jobs:
+  linux:
+    if: github.event.repository.private == false
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      PYTHONUTF8: '1'
+      TZ: Asia/Shanghai
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install --disable-pip-version-check --require-hashes -r deployment/runner-requirements-linux.lock
+      - run: python -m pip check
+      - run: python -B verification/linux_test.py
