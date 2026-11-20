@@ -88,6 +88,10 @@ def main():
     phase=datetime.now(timezone.utc);discovery_deadline=min(phase+timedelta(seconds=90),cutoff-timedelta(seconds=90))
     discovery=measured('broad-discovery',market_scan.generate)(root,now=phase,deadline=discovery_deadline,refresh=True)
     summary['discovery']={'status':discovery['status'],'asOf':discovery.get('asOf'),'coverage':discovery['coverage'],'providerPaginationComplete':discovery['providerPaginationComplete'],'candidateCount':0}
+    if discovery.get('items') and (discovery_deadline-datetime.now(timezone.utc)).total_seconds()>=8:
+     try:
+      measured('cold-benchmark-cache-prewarm',radar_market.collect)(root,now=datetime.now(timezone.utc),deadline=discovery_deadline)
+     except (ValueError,OSError,KeyError):pass
     if (discovery_deadline-datetime.now(timezone.utc)).total_seconds()>=8:
      review=measured('discovery-history-review',market_scan_history.generate)(root,discovery,deadline=discovery_deadline)
      summary['discoveryHistory']={k:review.get(k) for k in ('sampleCount','sampleLimit','codes','tradeCandidateCount')}
@@ -103,7 +107,7 @@ def main():
     summary['quotes']={s:{k:a.get(k) for k in ('source','sourceTime','fetchedAt','checkedAt','sourceAgeSeconds','receiptAgeSeconds','intradaySignalAllowed','status','failureCodes')} for s,a in audits.items()}
     all_live=bool(audits) and all(a.get('intradaySignalAllowed') is True for a in audits.values())
     summary['intradayQualification']={'passed':gate['originalAnalysisWindowOpen'] and all_live,'allHoldingQuotesEligible':all_live,'reason':None if gate['originalAnalysisWindowOpen'] and all_live else 'OUTSIDE_ORIGINAL_WINDOW' if not gate['originalAnalysisWindowOpen'] else 'ORIGINAL_QUOTE_GATES_NOT_PASSED'}
-    summary['report']={'generated':True,'bytes':len(raw),'sha256':sha,'readbackIdentical':True,'status':report['status'],'marketHealth':report.get('marketHealth'),'researchPoolItems':len(items),'scoredItems':sum(bool(x.get('score')) for x in items),'strategyStudies':sum(len(x.get('strategies',{})) for x in labs),'expectedMaximumStrategyStudies':len(radar_market.catalog()['instruments'])*len(strategy_lab.STRATEGIES),'labsCompleted':len(labs),'labOrQualityCodes':{x['symbol']:x.get('quality',{}).get('codes',[])+([x['labError']] if x.get('labError') else []) for x in items if x.get('labError') or x.get('quality',{}).get('codes')},'fullMarketScanVerified':False,'syntheticAuthoritativeHistoryPersisted':False}
+    summary['report']={'generated':True,'bytes':len(raw),'sha256':sha,'readbackIdentical':True,'status':report['status'],'marketHealth':report.get('marketHealth'),'researchPoolItems':len(items),'scoredItems':sum(bool(x.get('score')) for x in items),'strategyStudies':sum(len(x.get('strategies',{})) for x in labs),'expectedMaximumStrategyStudies':len(radar_market.catalog()['instruments'])*len(strategy_lab.STRATEGIES),'labsCompleted':len(labs),'labOrQualityCodes':{x['symbol']:x.get('quality',{}).get('codes',[])+x.get('rejections',[]) for x in items if x.get('quality',{}).get('codes') or any('策略证据或计算' in r for r in x.get('rejections',[]))},'fullMarketScanVerified':False,'syntheticAuthoritativeHistoryPersisted':False}
     summary['status']='benchmark-completed'
    except Exception as error:summary.update(status='benchmark-failed',code=safe_code(error))
  summary['requests']=observations;summary['networkRequests']=requests;summary['httpStatusCounts']=dict(Counter(str(x['httpStatus']) for x in observations));summary['elapsedSeconds']=round(time.monotonic()-start,3);summary['peakRssKiB']=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss;summary['finishedAt']=datetime.now(timezone.utc).isoformat()

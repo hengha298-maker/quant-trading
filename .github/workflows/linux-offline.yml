@@ -2,7 +2,8 @@ name: Offline Linux engine validation
 on:
   push:
     branches: [codex/goose-linux-offline-ebde92f-20261118]
-    paths: [investment/**, v32/**, v33/**, deployment/**, verification/linux_test.py]
+    # The offline fixture does not import these two benchmark-only modules.
+    paths: [investment/**, '!investment/daily.py', '!investment/quarantine_review.py', v32/**, v33/**, deployment/**, verification/linux_test.py]
 permissions:
   contents: read
 jobs:
